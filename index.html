@@ -522,7 +522,7 @@ $('import-go').onclick = async ()=>{
     if(mErr) throw mErr;
     // 4. store original file (best-effort)
     if(fileToStore){
-      const path = `${meeting.id}/${encodeURIComponent(fileToStore.name)}`;
+      const path = `${meeting.id}/${storageKey(fileToStore.name)}`;
       const { error: sErr } = await supabase.storage.from('meeting-files').upload(path, fileToStore);
       if(!sErr) await supabase.from('meetings').update({ transcript_file_path: path }).eq('id', meeting.id);
     } else {
@@ -908,8 +908,10 @@ function fmtSize(b){
   return (b/1024/1024).toFixed(1) + ' MB';
 }
 function displayName(path){
-  const base = path.split('/').pop().replace(/^\d+_/, '');   // 先頭のタイムスタンプを外す
-  try { return decodeURIComponent(base); } catch { return base; }
+  const raw = path.split('/').pop().replace(/^\d+_/, '');   // 先頭のタイムスタンプを外す
+  const { base, ext } = splitExt(raw);
+  const decoded = decodeName(base);
+  return ext ? `${decoded}.${ext}` : decoded;
 }
 async function loadAttachments(){
   const el = $('attach-list'); if(!el) return;
@@ -929,16 +931,39 @@ async function loadAttachments(){
   el.querySelectorAll('.attach-name').forEach(n=>{ n.onclick = ()=> openAttachment(n.dataset.path); });
   el.querySelectorAll('.attach-del').forEach(b=>{ b.onclick = ()=> deleteAttachment(b.dataset.id, b.dataset.path); });
 }
+// Storageのキーは非ASCII不可。さらにパーセントエンコードはサーバー側でデコードされて
+// 弾かれるため、%を含まないbase64urlでファイル名を保持する。
+function encodeName(name){
+  const bytes = new TextEncoder().encode(name);
+  let bin = ''; bytes.forEach(b=> bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function decodeName(enc){
+  try{
+    const b64 = enc.replace(/-/g,'+').replace(/_/g,'/');
+    const bin = atob(b64 + '='.repeat((4 - b64.length % 4) % 4));
+    const bytes = Uint8Array.from(bin, c=>c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  }catch{ return enc; }
+}
+function splitExt(name){
+  const i = name.lastIndexOf('.');
+  if(i <= 0) return { base:name, ext:'' };
+  return { base:name.slice(0,i), ext:name.slice(i+1) };
+}
+function storageKey(name){
+  const { base, ext } = splitExt(name);
+  const safeExt = ext.replace(/[^A-Za-z0-9]/g,'').slice(0,10);
+  return `${Date.now()}_${encodeName(base)}${safeExt?'.'+safeExt:''}`;
+}
+
 async function uploadAttachments(files){
   if(!files || !files.length) return;
   const el = $('attach-list');
   el.innerHTML = `<div class="gen-status" style="padding:12px 0;"><span class="spinner dark"></span><span>アップロード中…</span></div>`;
   try{
     for(const f of files){
-      // Storageのキーは非ASCII不可。日本語ファイル名はパーセントエンコードして保持し、
-      // 表示時にデコードして元の名前に戻す。
-      const safe = encodeURIComponent(f.name).replace(/[!'()*]/g, c=>'%'+c.charCodeAt(0).toString(16));
-      const path = `${currentMeeting.id}/attachments/${Date.now()}_${safe}`;
+      const path = `${currentMeeting.id}/attachments/${storageKey(f.name)}`;
       const { error: upErr } = await supabase.storage.from('meeting-files').upload(path, f);
       if(upErr) throw upErr;
       const { error: dbErr } = await supabase.from('attachments').insert({ meeting_id: currentMeeting.id, file_path: path });
