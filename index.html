@@ -295,6 +295,13 @@ function toast(msg, isErr=false){
   setTimeout(()=>t.className='toast', isErr?4200:2400);
 }
 function esc(s){ return (s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// AIの出力に改行が入らない場合があるため、「・」の手前で改行を補う
+function normalizeBullets(s){
+  if(!s) return '';
+  if(!s.includes('・')) return s;
+  return s.replace(/\s*・\s*/g, '\n・').replace(/^\n/, '').trim();
+}
+function bodyHtml(s){ return esc(normalizeBullets(s)).replace(/\n/g,'<br>'); }
 function fmtDate(d){ if(!d) return ''; const dt = new Date(d+'T00:00:00'); return `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}`; }
 
 /* ============ AUTH ============ */
@@ -405,7 +412,7 @@ function renderList(){
         </div>
         <span class="status-pill ${m.status==='confirmed'?'status-confirmed':'status-draft'}">${m.status==='confirmed'?'確定済み':'下書き'}</span>
       </div>
-      <p class="card-excerpt">${esc(summaryExcerpt(m.summaries).slice(0,140))}</p>
+      <p class="card-excerpt">${esc(summaryExcerpt(m.summaries).replace(/\s*・\s*/g,' / ').slice(0,140))}</p>
       <div class="tag-row">${tnames.map(n=>`<span class="tag">${esc(n)}</span>`).join('')}</div>`;
     card.onclick = ()=> openSummary(m.id);
     el.appendChild(card);
@@ -656,9 +663,9 @@ function renderSummary(){
     const val = content[sec.key] ?? '';
     html += `<div class="block"><div class="field-label">${esc(sec.label)}</div>`;
     if(editMode){
-      html += `<textarea class="field-edit" data-key="${esc(sec.key)}">${esc(val)}</textarea>`;
+      html += `<textarea class="field-edit" data-key="${esc(sec.key)}">${esc(normalizeBullets(val))}</textarea>`;
     } else {
-      html += `<div class="field-body">${esc(val).replace(/\n/g,'<br>')}</div>`;
+      html += `<div class="field-body">${bodyHtml(val)}</div>`;
     }
     html += `</div>`;
   });
@@ -858,7 +865,7 @@ function openPrintView(){
     if(!val) return '';
     return `<div class="sec">
       <div class="sec-head">${esc(sec.label)}</div>
-      <div class="sec-body">${esc(val).replace(/\n/g,'<br>')}</div>
+      <div class="sec-body">${bodyHtml(val)}</div>
     </div>`;
   }).join('');
 
