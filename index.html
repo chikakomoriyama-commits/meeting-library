@@ -522,7 +522,7 @@ $('import-go').onclick = async ()=>{
     if(mErr) throw mErr;
     // 4. store original file (best-effort)
     if(fileToStore){
-      const path = `${meeting.id}/${fileToStore.name}`;
+      const path = `${meeting.id}/${encodeURIComponent(fileToStore.name)}`;
       const { error: sErr } = await supabase.storage.from('meeting-files').upload(path, fileToStore);
       if(!sErr) await supabase.from('meetings').update({ transcript_file_path: path }).eq('id', meeting.id);
     } else {
@@ -908,8 +908,8 @@ function fmtSize(b){
   return (b/1024/1024).toFixed(1) + ' MB';
 }
 function displayName(path){
-  const base = path.split('/').pop();
-  return base.replace(/^\d+_/, '');   // 先頭のタイムスタンプを外す
+  const base = path.split('/').pop().replace(/^\d+_/, '');   // 先頭のタイムスタンプを外す
+  try { return decodeURIComponent(base); } catch { return base; }
 }
 async function loadAttachments(){
   const el = $('attach-list'); if(!el) return;
@@ -935,7 +935,9 @@ async function uploadAttachments(files){
   el.innerHTML = `<div class="gen-status" style="padding:12px 0;"><span class="spinner dark"></span><span>アップロード中…</span></div>`;
   try{
     for(const f of files){
-      const safe = f.name.replace(/[^\w.\-ぁ-んァ-ヶ一-龠]/g, '_');
+      // Storageのキーは非ASCII不可。日本語ファイル名はパーセントエンコードして保持し、
+      // 表示時にデコードして元の名前に戻す。
+      const safe = encodeURIComponent(f.name).replace(/[!'()*]/g, c=>'%'+c.charCodeAt(0).toString(16));
       const path = `${currentMeeting.id}/attachments/${Date.now()}_${safe}`;
       const { error: upErr } = await supabase.storage.from('meeting-files').upload(path, f);
       if(upErr) throw upErr;
