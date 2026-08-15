@@ -264,6 +264,15 @@ const SUPABASE_URL = 'https://kzzdsibwjvocbihfqtlv.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_n2qWIOJzVfrzjYANDe4UzA_O4dLVmZ1';
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 
+// 話者名の読み替え(Zoomのアカウント表示名 → 実際の呼び名)
+const SPEAKER_ALIASES = {
+  'Robert Fritz Consulting': 'ちか',
+};
+function aliasSpeaker(name){
+  const n = name.trim();
+  return SPEAKER_ALIASES[n] || n;
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ============ STATE ============ */
@@ -424,7 +433,14 @@ function setFile(f){
 }
 
 function parseVTT(text){
-  if(!/^WEBVTT/m.test(text)) return text; // plain text
+  if(!/^WEBVTT/m.test(text)){
+    // プレーンテキストにも話者名の読み替えを適用
+    let t = text;
+    for(const [from,to] of Object.entries(SPEAKER_ALIASES)){
+      t = t.split(from).join(to);
+    }
+    return t;
+  }
   const lines = text.split(/\r?\n/);
   const out = [];
   let lastSpeaker = null;
@@ -433,8 +449,9 @@ function parseVTT(text){
     // Zoom VTT style: "Speaker Name: utterance"
     const m = line.match(/^([^:：]{1,40})[:：]\s*(.+)$/);
     if(m){
-      if(m[1]===lastSpeaker){ out.push(m[2]); }
-      else { out.push(`\n${m[1]}: ${m[2]}`); lastSpeaker = m[1]; }
+      const spk = aliasSpeaker(m[1]);
+      if(spk===lastSpeaker){ out.push(m[2]); }
+      else { out.push(`\n${spk}: ${m[2]}`); lastSpeaker = spk; }
     } else out.push(line.trim());
   }
   return out.join(' ').replace(/\n /g,'\n').trim();
@@ -531,13 +548,14 @@ async function callClaude(system, user, maxTokens=4000){
   return data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
 }
 
+const SECTION_LABELS = {
+  decisions:'決定事項', actions:'アクション', open_issues:'継続論点',
+  discussion_points:'議論の要点', agreements:'合意事項', mutual_actions:'双方のアクション',
+  purpose:'目的', points:'要点', overview:'概要',
+};
+function sectionLabel(k){ return SECTION_LABELS[k]||k; }
 function templateSections(cat){
-  const map = {
-    decisions:'決定事項', actions:'アクション', open_issues:'継続論点',
-    discussion_points:'議論の要点', agreements:'合意事項', mutual_actions:'双方のアクション',
-    purpose:'目的', points:'要点',
-  };
-  return (cat.template?.sections||[]).map(k=>({key:k, label:map[k]||k}));
+  return (cat.template?.sections||[]).map(k=>({key:k, label:sectionLabel(k)}));
 }
 
 async function generateFromTranscript(transcript, userTitle){
@@ -608,10 +626,22 @@ function renderSummary(){
 
   const main = $('sum-main-col'); const side = $('sum-side-col');
   const content = s?.content || {};
-  const sections = templateSections(cat||{}).length ? templateSections(cat) : Object.keys(content).map(k=>({key:k,label:k}));
+  const tplSections = templateSections(cat||{});
+  // カテゴリ変更後も旧キーの内容が見えるように、テンプレ項目+既存キーの和集合を表示
+  const sections = [...tplSections];
+  Object.keys(content).forEach(k=>{
+    if(!sections.some(sec=>sec.key===k) && content[k]){
+      sections.push({ key:k, label: sectionLabel(k) + '(旧カテゴリの項目)', legacy:true });
+    }
+  });
+  if(!sections.length) Object.keys(content).forEach(k=>sections.push({key:k,label:sectionLabel(k)}));
+  const hasLegacy = sections.some(sec=>sec.legacy);
 
   // main panel
   let html = `<div class="panel"><h3>サマリー ${editMode?'(編集可)':''}</h3>`;
+  if(hasLegacy && tplSections.length){
+    html += `<div class="warn-note">カテゴリを変更したため、旧カテゴリの項目が残っています。<button class="btn btn-sm" id="remap-btn" style="margin-left:8px;">AIで新カテゴリの形式に整え直す</button></div>`;
+  }
   sections.forEach((sec,i)=>{
     const val = content[sec.key] ?? '';
     html += `<div class="block"><div class="field-label">${esc(sec.label)}</div>`;
@@ -715,6 +745,7 @@ function renderSummary(){
     navigator.clipboard.writeText(currentSummary?.short_summary||'').then(()=>toast('コピーしました'));
   };
   const delBtn = $('delete-btn'); if(delBtn) delBtn.onclick = deleteMeeting;
+  const remapBtn = $('remap-btn'); if(remapBtn) remapBtn.onclick = remapToCategory;
   document.querySelectorAll('[data-action-idx]').forEach(cb=>{
     cb.onchange = async e=>{
       const idx = +e.target.dataset.actionIdx;
@@ -722,6 +753,36 @@ function renderSummary(){
       await supabase.from('summaries').update({ open_actions: currentSummary.open_actions }).eq('id', currentSummary.id);
     };
   });
+}
+
+async function remapToCategory(){
+  const key = requireKey(); if(!key) return;
+  const cat = categories.find(c=>c.id===currentMeeting.category_id);
+  const tpl = templateSections(cat);
+  if(!tpl.length){ toast('このカテゴリは自動整形に対応していません', true); return; }
+  const btn = $('remap-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner dark"></span> 整形中…';
+  try{
+    const system = 'あなたはミーティングサマリーの整理アシスタントです。必ずJSONのみを返してください(前置き・コードフェンス禁止)。';
+    const user = `以下の既存サマリーの内容を、新しいカテゴリ「${cat.name}」の形式に整理し直してください。情報は削らず再配置してください。
+
+## 出力JSON形式(キーはこの通りに)
+{ ${tpl.map(s=>`"${s.key}": "本文"`).join(', ')} }
+
+## 既存サマリー
+${JSON.stringify(currentSummary.content, null, 2)}`;
+    const raw = await callClaude(system, user, 3000);
+    const newContent = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    const { error } = await supabase.from('summaries').update({ content: newContent }).eq('id', currentSummary.id);
+    if(error) throw error;
+    currentSummary.content = newContent;
+    toast('新カテゴリの形式に整え直しました');
+    renderSummary();
+  }catch(err){
+    console.error(err);
+    toast('整形エラー: ' + (err.message||err), true);
+    renderSummary();
+  }
 }
 
 function collectEdits(){
@@ -777,7 +838,10 @@ function openPrintView(){
   const cat = categories.find(c=>c.id===m.category_id);
   const tnames = (m.topic_ids||[]).map(id=>topics.find(t=>t.id===id)?.name).filter(Boolean);
   const content = s?.content || {};
-  const sections = templateSections(cat||{}).length ? templateSections(cat) : Object.keys(content).map(k=>({key:k,label:k}));
+  const sections = templateSections(cat||{});
+  Object.keys(content).forEach(k=>{
+    if(!sections.some(sec=>sec.key===k) && content[k]) sections.push({key:k,label:sectionLabel(k)});
+  });
   const actions = s?.open_actions || [];
   const doneCount = actions.filter(a=>a.done).length;
 
