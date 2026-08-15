@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meeting Library</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAF7F0; --surface:#FFFFFF; --surface-soft:#FBF8F2;
+    --border:#E9E2D3; --border-soft:#F0EBDE;
+    --text:#2E2A22; --text-muted:#948B78; --text-faint:#B9B0A0;
+    --accent:#C17A4E; --accent-soft:#F3E3D5; --accent-deep:#9C5A32;
+    --sage:#7C8A6A; --sage-soft:#E7EBDF;
+    --amber:#C89A3E; --amber-soft:#F5EBD3;
+    --rose:#BD6B5C; --rose-soft:#F3E0DB;
+    --gray-soft:#EDEAE2;
+    --radius-lg:18px; --radius-md:12px; --radius-sm:8px;
+    --shadow: 0 1px 2px rgba(60,50,30,0.04), 0 6px 20px rgba(60,50,30,0.05);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Noto Sans JP",-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;}
+  .app{display:flex;min-height:100vh;}
+  .hidden{display:none !important;}
+
+  /* Sidebar */
+  .sidebar{width:236px;flex-shrink:0;background:var(--surface-soft);border-right:1px solid var(--border-soft);padding:28px 18px;display:flex;flex-direction:column;gap:26px;}
+  .brand{display:flex;align-items:center;gap:10px;padding:0 8px;}
+  .brand-mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0;}
+  .brand-text{display:flex;flex-direction:column;line-height:1.25;}
+  .brand-text .name{font-weight:700;font-size:15px;}
+  .brand-text .sub{font-size:11px;color:var(--text-muted);}
+  .nav{display:flex;flex-direction:column;gap:3px;}
+  .nav-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:var(--radius-sm);color:var(--text-muted);cursor:pointer;font-size:13.5px;font-weight:500;border:1px solid transparent;transition:background .15s,color .15s;}
+  .nav-item .ico{width:18px;height:18px;flex-shrink:0;opacity:.75;}
+  .nav-item:hover{background:var(--gray-soft);color:var(--text);}
+  .nav-item.active{background:var(--surface);color:var(--accent-deep);border-color:var(--border);box-shadow:var(--shadow);font-weight:600;}
+  .sidebar-foot{margin-top:auto;padding:12px 10px;border-top:1px solid var(--border-soft);font-size:11px;color:var(--text-faint);line-height:1.6;}
+  .sidebar-foot a{color:var(--text-muted);cursor:pointer;text-decoration:underline;}
+
+  /* Main */
+  .main{flex:1;min-width:0;padding:30px 38px 60px;max-width:1080px;}
+  .page-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;flex-wrap:wrap;gap:14px;}
+  .page-head h1{font-size:21px;margin:0 0 5px;font-weight:700;}
+  .page-head .desc{font-size:12.5px;color:var(--text-muted);margin:0;max-width:520px;line-height:1.6;}
+
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit;}
+  .btn:hover{border-color:var(--accent);color:var(--accent-deep);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn-primary:hover{background:var(--accent-deep);border-color:var(--accent-deep);color:#fff;}
+  .btn-ghost{border-color:transparent;background:transparent;}
+  .btn-ghost:hover{background:var(--gray-soft);border-color:transparent;color:var(--text);}
+  .btn-sm{padding:6px 12px;font-size:11.5px;}
+  .btn-danger:hover{border-color:var(--rose);color:var(--rose);}
+
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap;}
+  .search{flex:1;min-width:220px;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:9px 16px;color:var(--text-muted);font-size:13px;}
+  .search svg{flex-shrink:0;opacity:.6;}
+  .search input{border:none;outline:none;background:transparent;font-size:13px;color:var(--text);width:100%;font-family:inherit;}
+
+  .cat-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;}
+  .cat-tab{padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);cursor:pointer;transition:all .15s;font-family:inherit;}
+  .cat-tab:hover{color:var(--text);}
+  .cat-tab.active{background:var(--text);border-color:var(--text);color:#fff;}
+
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;}
+  .badge-dot{width:6px;height:6px;border-radius:50%;}
+  .b-1{background:var(--sage-soft);color:#4E5C3C;} .b-1 .badge-dot{background:var(--sage);}
+  .b-2{background:#DDEAF0;color:#2F5A6B;} .b-2 .badge-dot{background:#4C86A0;}
+  .b-3{background:var(--accent-soft);color:var(--accent-deep);} .b-3 .badge-dot{background:var(--accent);}
+  .b-4{background:#EAE1F2;color:#6B4A8C;} .b-4 .badge-dot{background:#8E68B0;}
+  .b-5{background:var(--amber-soft);color:#8A6A1F;} .b-5 .badge-dot{background:var(--amber);}
+
+  .list{display:flex;flex-direction:column;gap:10px;}
+  .card{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-md);padding:16px 18px;box-shadow:var(--shadow);cursor:pointer;transition:transform .12s,border-color .12s;}
+  .card:hover{border-color:var(--border);transform:translateY(-1px);}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;}
+  .card-title{font-size:14.5px;font-weight:700;margin:0 0 3px;}
+  .card-meta{font-size:11.5px;color:var(--text-faint);display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .status-pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;}
+  .status-draft{background:#F1ECDF;color:#8A7A46;}
+  .status-confirmed{background:var(--sage-soft);color:#4E5C3C;}
+  .card-excerpt{font-size:12.5px;color:var(--text-muted);line-height:1.65;margin:6px 0 10px;}
+  .tag-row{display:flex;gap:6px;flex-wrap:wrap;}
+  .tag{font-size:10.5px;background:var(--gray-soft);color:var(--text-muted);padding:3px 9px;border-radius:6px;font-weight:600;}
+  .empty-note{font-size:11.5px;color:var(--text-faint);text-align:center;padding:36px 0;}
+
+  /* Summary layout */
+  .summary-layout{display:grid;grid-template-columns:1fr 300px;gap:22px;align-items:start;}
+  @media (max-width:980px){.summary-layout{grid-template-columns:1fr;}}
+  .panel{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-lg);padding:22px 24px;box-shadow:var(--shadow);margin-bottom:16px;}
+  .panel h3{font-size:12px;font-weight:700;color:var(--accent-deep);text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px;}
+  .panel .block + .block{margin-top:16px;padding-top:16px;border-top:1px dashed var(--border-soft);}
+  .field-label{font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px;}
+  .field-body{font-size:13.5px;line-height:1.85;color:var(--text);}
+  .field-edit{width:100%;min-height:70px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;line-height:1.8;font-family:inherit;color:var(--text);resize:vertical;background:var(--surface-soft);}
+  .field-edit:focus{outline:none;border-color:var(--accent);}
+  input.field-edit{min-height:auto;}
+  .notes-box{width:100%;min-height:80px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:12.5px;font-family:inherit;color:var(--text);resize:vertical;background:var(--surface-soft);}
+  .notes-box:focus{outline:none;border-color:var(--accent);}
+  .action-row{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft);}
+  .action-row:last-child{border-bottom:none;}
+  .action-text{font-size:12.5px;line-height:1.6;flex:1;}
+  .action-owner{font-size:10.5px;color:var(--text-faint);margin-top:2px;}
+  .side-panel-title{font-size:13px;font-weight:700;margin:0 0 4px;}
+  .side-panel-sub{font-size:11px;color:var(--text-faint);margin:0 0 14px;}
+  .exit-box{background:var(--accent-soft);border:1px solid #E6C7AC;border-radius:var(--radius-md);padding:16px;margin-bottom:14px;}
+  .exit-box .lbl{font-size:11px;font-weight:700;color:var(--accent-deep);margin-bottom:6px;}
+  .exit-box .exp{font-size:11.5px;color:#7A5334;line-height:1.6;margin-bottom:12px;}
+  select{padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);font-size:12.5px;font-family:inherit;background:var(--surface);color:var(--text);width:100%;}
+
+  /* Modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(46,42,34,.35);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
+  .modal{background:var(--surface);border-radius:var(--radius-lg);padding:26px 28px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(60,50,30,.2);max-height:90vh;overflow-y:auto;}
+  .modal h2{font-size:16px;margin:0 0 16px;font-weight:700;}
+  .modal .fld{margin-bottom:14px;}
+  .modal label{display:block;font-size:11.5px;font-weight:700;color:var(--text-muted);margin-bottom:6px;}
+  .modal input[type=text],.modal input[type=email],.modal input[type=password],.modal input[type=date],.modal textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;background:var(--surface-soft);color:var(--text);}
+  .modal textarea{min-height:140px;resize:vertical;}
+  .modal input:focus,.modal textarea:focus{outline:none;border-color:var(--accent);}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  .drop-zone{border:2px dashed var(--border);border-radius:var(--radius-md);padding:26px;text-align:center;color:var(--text-muted);font-size:12.5px;cursor:pointer;transition:border-color .15s;background:var(--surface-soft);}
+  .drop-zone:hover,.drop-zone.over{border-color:var(--accent);color:var(--accent-deep);}
+  .or-sep{text-align:center;font-size:11px;color:var(--text-faint);margin:14px 0;font-weight:700;}
+
+  /* Login */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-card{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-lg);padding:34px 36px;width:100%;max-width:380px;box-shadow:var(--shadow);}
+  .login-card .brand{margin-bottom:22px;padding:0;}
+  .login-card .fld{margin-bottom:14px;}
+  .login-card label{display:block;font-size:11.5px;font-weight:700;color:var(--text-muted);margin-bottom:6px;}
+  .login-card input{width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;font-family:inherit;background:var(--surface-soft);}
+  .login-card input:focus{outline:none;border-color:var(--accent);}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;font-size:12.5px;font-weight:600;padding:11px 20px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;}
+  .toast.show{opacity:.95;}
+  .toast.err{background:var(--rose);}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;}
+  .spinner.dark{border-color:rgba(46,42,34,.2);border-top-color:var(--accent-deep);}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .gen-status{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-muted);padding:30px 0;justify-content:center;}
+  .warn-note{font-size:11.5px;color:#8A6A1F;background:var(--amber-soft);border-radius:var(--radius-sm);padding:10px 13px;line-height:1.6;margin-bottom:14px;}
+  .back-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);cursor:pointer;margin-bottom:14px;font-weight:600;}
+  .back-link:hover{color:var(--accent-deep);}
+  @media (max-width:760px){
+    .sidebar{display:none;}
+    .main{padding:20px 16px 50px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN ===== -->
+<div id="login-view" class="login-wrap hidden">
+  <div class="login-card">
+    <div class="brand">
+      <div class="brand-mark">ML</div>
+      <div class="brand-text"><span class="name">Meeting Library</span><span class="sub">My Workspace</span></div>
+    </div>
+    <div class="fld"><label>メールアドレス</label><input type="email" id="login-email" autocomplete="email"></div>
+    <div class="fld"><label>パスワード</label><input type="password" id="login-pass" autocomplete="current-password"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;" id="login-btn">ログイン</button>
+    <p id="login-err" style="font-size:11.5px;color:var(--rose);margin:10px 0 0;"></p>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="app-view" class="app hidden">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">ML</div>
+      <div class="brand-text"><span class="name">Meeting Library</span><span class="sub">My Workspace</span></div>
+    </div>
+    <div class="nav">
+      <div class="nav-item active" id="nav-home">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+        <span>ホーム / ライブラリ</span>
+      </div>
+    </div>
+    <div class="sidebar-foot">
+      Meeting Library MVP<br>
+      Supabase 連携 / Claude API 要約生成<br><br>
+      <a id="settings-link">API設定</a> · <a id="logout-link">ログアウト</a>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- HOME -->
+    <div id="page-home">
+      <div class="page-head">
+        <div>
+          <h1>ホーム / ライブラリ</h1>
+          <p class="desc">すべてのミーティングをカテゴリ別に一覧。取り込み → AI判定 → サマリー化までの入口です。</p>
+        </div>
+        <button class="btn btn-primary" id="import-btn">＋ 文字起こしを取り込む</button>
+      </div>
+      <div class="toolbar">
+        <div class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="search-input" placeholder="タイトル・サマリー内容で検索…">
+        </div>
+      </div>
+      <div class="cat-tabs" id="cat-tabs"></div>
+      <div class="list" id="meeting-list"></div>
+    </div>
+
+    <!-- SUMMARY -->
+    <div id="page-summary" class="hidden">
+      <span class="back-link" id="back-to-home">← ライブラリに戻る</span>
+      <div class="page-head">
+        <div style="flex:1;min-width:0;">
+          <h1 id="sum-title" style="word-break:break-word;"></h1>
+          <p class="desc" id="sum-meta"></p>
+        </div>
+      </div>
+      <div id="sum-generating" class="gen-status hidden"><span class="spinner dark"></span><span id="gen-msg">AIがサマリーを生成しています…</span></div>
+      <div class="summary-layout" id="sum-body">
+        <div id="sum-main-col"></div>
+        <div id="sum-side-col"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== IMPORT MODAL ===== -->
+<div id="import-modal" class="modal-bg hidden">
+  <div class="modal">
+    <h2>文字起こしを取り込む</h2>
+    <div class="drop-zone" id="drop-zone">VTT / TXT ファイルをドロップ、またはクリックして選択</div>
+    <input type="file" id="file-input" accept=".vtt,.txt" class="hidden">
+    <div class="or-sep">— または貼り付け —</div>
+    <div class="fld"><textarea id="paste-text" placeholder="文字起こしテキストをここに貼り付け…"></textarea></div>
+    <div class="fld"><label>タイトル(空欄ならAIが提案)</label><input type="text" id="import-title"></div>
+    <div class="fld"><label>ミーティング日</label><input type="date" id="import-date"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="import-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="import-go">取り込んで生成</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SETTINGS MODAL ===== -->
+<div id="settings-modal" class="modal-bg hidden">
+  <div class="modal">
+    <h2>API設定</h2>
+    <div class="warn-note">Anthropic APIキーはこのブラウザのlocalStorageにのみ保存されます(Supabaseには送信されません)。共有PCでは使用後に削除してください。</div>
+    <div class="fld"><label>Anthropic API Key</label><input type="password" id="api-key-input" placeholder="sk-ant-..."></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="settings-cancel">閉じる</button>
+      <button class="btn btn-primary" id="settings-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+/* ============ CONFIG ============ */
+const SUPABASE_URL = 'https://kzzdsibwjvocbihfqtlv.supabase.co';
+const SUPABASE_ANON_KEY = 'PASTE_YOUR_ANON_KEY_HERE'; // ← SupabaseダッシュボードのProject Settings > API から
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ============ STATE ============ */
+let categories = [];      // meeting_categories rows
+let topics = [];          // topics rows
+let meetings = [];        // meetings joined w/ summaries excerpt
+let activeCatId = 'all';
+let currentMeeting = null;   // meeting row being viewed
+let currentSummary = null;   // summaries row
+let editMode = false;
+
+const $ = id => document.getElementById(id);
+const catBadgeClass = c => 'b-' + (c?.sort_order ?? 1);
+
+function toast(msg, isErr=false){
+  const t = $('toast'); t.textContent = msg;
+  t.className = 'toast show' + (isErr?' err':'');
+  setTimeout(()=>t.className='toast', isErr?4200:2400);
+}
+function esc(s){ return (s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(d){ if(!d) return ''; const dt = new Date(d+'T00:00:00'); return `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}`; }
+
+/* ============ AUTH ============ */
+async function init(){
+  const { data:{ session } } = await supabase.auth.getSession();
+  if(session){ showApp(); } else { showLogin(); }
+  supabase.auth.onAuthStateChange((_e, s)=>{ if(s && $('app-view').classList.contains('hidden')) showApp(); });
+}
+function showLogin(){ $('login-view').classList.remove('hidden'); $('app-view').classList.add('hidden'); }
+async function showApp(){
+  $('login-view').classList.add('hidden'); $('app-view').classList.remove('hidden');
+  await loadAll();
+}
+$('login-btn').onclick = async ()=>{
+  $('login-err').textContent='';
+  const { error } = await supabase.auth.signInWithPassword({ email:$('login-email').value.trim(), password:$('login-pass').value });
+  if(error){ $('login-err').textContent = 'ログインできませんでした: ' + error.message; return; }
+  showApp();
+};
+$('login-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') $('login-btn').click(); });
+$('logout-link').onclick = async ()=>{ await supabase.auth.signOut(); location.reload(); };
+
+/* ============ SETTINGS (API key) ============ */
+$('settings-link').onclick = ()=>{ $('api-key-input').value = localStorage.getItem('ml_anthropic_key')||''; $('settings-modal').classList.remove('hidden'); };
+$('settings-cancel').onclick = ()=> $('settings-modal').classList.add('hidden');
+$('settings-save').onclick = ()=>{
+  const v = $('api-key-input').value.trim();
+  if(v) localStorage.setItem('ml_anthropic_key', v); else localStorage.removeItem('ml_anthropic_key');
+  $('settings-modal').classList.add('hidden'); toast('保存しました');
+};
+function requireKey(){
+  const k = localStorage.getItem('ml_anthropic_key');
+  if(!k){ toast('先に「API設定」からAnthropic APIキーを保存してください', true); $('settings-link').click(); }
+  return k;
+}
+
+/* ============ DATA LOAD ============ */
+async function loadAll(){
+  const [catRes, topRes] = await Promise.all([
+    supabase.from('meeting_categories').select('*').order('sort_order'),
+    supabase.from('topics').select('*').eq('status','active').order('name'),
+  ]);
+  if(catRes.error){ toast('カテゴリ読込エラー: '+catRes.error.message, true); return; }
+  categories = catRes.data; topics = topRes.data||[];
+  await loadMeetings();
+  renderCatTabs();
+}
+async function loadMeetings(){
+  const { data, error } = await supabase.from('meetings')
+    .select('id,title,meeting_date,category_id,topic_ids,status,created_at, summaries(id,content,short_summary,open_actions,user_notes,confirmed_at)')
+    .order('meeting_date',{ascending:false}).order('created_at',{ascending:false});
+  if(error){ toast('読込エラー: '+error.message, true); return; }
+  meetings = data;
+  renderList();
+}
+
+/* ============ HOME RENDER ============ */
+function renderCatTabs(){
+  const el = $('cat-tabs');
+  el.innerHTML = '';
+  const mk = (id,label)=>{
+    const b = document.createElement('button');
+    b.className = 'cat-tab' + (activeCatId===id?' active':'');
+    b.textContent = label;
+    b.onclick = ()=>{ activeCatId=id; renderCatTabs(); renderList(); };
+    return b;
+  };
+  el.appendChild(mk('all','すべて'));
+  categories.forEach(c=> el.appendChild(mk(c.id, c.name)));
+}
+function summaryExcerpt(s){
+  if(!s) return '';
+  if(s.short_summary) return s.short_summary;
+  const c = s.content||{};
+  if(c.dialogue) return c.dialogue.slice(0,2).map(d=>d.text).join(' ');
+  return Object.values(c).filter(v=>typeof v==='string').join(' ').slice(0,120);
+}
+function renderList(){
+  const q = $('search-input').value.trim().toLowerCase();
+  const el = $('meeting-list');
+  el.innerHTML = '';
+  const rows = meetings.filter(m=>{
+    if(activeCatId!=='all' && m.category_id!==activeCatId) return false;
+    if(q){
+      const s = m.summaries;
+      const hay = (m.title + ' ' + summaryExcerpt(s) + ' ' + JSON.stringify(s?.content||{})).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  if(!rows.length){ el.innerHTML = '<div class="empty-note">ミーティングはまだありません。「＋ 文字起こしを取り込む」から始めましょう。</div>'; return; }
+  rows.forEach(m=>{
+    const cat = categories.find(c=>c.id===m.category_id);
+    const tnames = (m.topic_ids||[]).map(id=>topics.find(t=>t.id===id)?.name).filter(Boolean);
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-top">
+        <div style="min-width:0;">
+          <h3 class="card-title">${esc(m.title)}</h3>
+          <div class="card-meta">
+            <span>${fmtDate(m.meeting_date)}</span>
+            <span class="badge ${catBadgeClass(cat)}"><span class="badge-dot"></span>${esc(cat?.name||'')}</span>
+          </div>
+        </div>
+        <span class="status-pill ${m.status==='confirmed'?'status-confirmed':'status-draft'}">${m.status==='confirmed'?'確定済み':'下書き'}</span>
+      </div>
+      <p class="card-excerpt">${esc(summaryExcerpt(m.summaries).slice(0,140))}</p>
+      <div class="tag-row">${tnames.map(n=>`<span class="tag">${esc(n)}</span>`).join('')}</div>`;
+    card.onclick = ()=> openSummary(m.id);
+    el.appendChild(card);
+  });
+}
+$('search-input').addEventListener('input', renderList);
+
+/* ============ IMPORT ============ */
+let importedFile = null;
+$('import-btn').onclick = ()=>{
+  importedFile = null; $('paste-text').value=''; $('import-title').value='';
+  $('import-date').value = new Date().toISOString().slice(0,10);
+  $('drop-zone').textContent = 'VTT / TXT ファイルをドロップ、またはクリックして選択';
+  $('import-modal').classList.remove('hidden');
+};
+$('import-cancel').onclick = ()=> $('import-modal').classList.add('hidden');
+$('drop-zone').onclick = ()=> $('file-input').click();
+$('drop-zone').ondragover = e=>{ e.preventDefault(); $('drop-zone').classList.add('over'); };
+$('drop-zone').ondragleave = ()=> $('drop-zone').classList.remove('over');
+$('drop-zone').ondrop = e=>{ e.preventDefault(); $('drop-zone').classList.remove('over'); if(e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); };
+$('file-input').onchange = e=>{ if(e.target.files[0]) setFile(e.target.files[0]); };
+function setFile(f){ importedFile = f; $('drop-zone').textContent = '選択中: ' + f.name; }
+
+function parseVTT(text){
+  if(!/^WEBVTT/m.test(text)) return text; // plain text
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  let lastSpeaker = null;
+  for(const line of lines){
+    if(/^WEBVTT/.test(line) || /-->/.test(line) || /^\d+$/.test(line.trim()) || !line.trim()) continue;
+    // Zoom VTT style: "Speaker Name: utterance"
+    const m = line.match(/^([^:：]{1,40})[:：]\s*(.+)$/);
+    if(m){
+      if(m[1]===lastSpeaker){ out.push(m[2]); }
+      else { out.push(`\n${m[1]}: ${m[2]}`); lastSpeaker = m[1]; }
+    } else out.push(line.trim());
+  }
+  return out.join(' ').replace(/\n /g,'\n').trim();
+}
+
+$('import-go').onclick = async ()=>{
+  const key = requireKey(); if(!key) return;
+  let raw = $('paste-text').value.trim();
+  let fileToStore = importedFile;
+  if(!raw && importedFile){ raw = await importedFile.text(); }
+  if(!raw){ toast('ファイルかテキストのどちらかを入れてください', true); return; }
+  const btn = $('import-go');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 処理中…';
+  try{
+    const transcript = parseVTT(raw);
+    // 1. AI: category + topics + title + summary
+    const ai = await generateFromTranscript(transcript, $('import-title').value.trim());
+    // 2. resolve topics (create missing)
+    const topicIds = await resolveTopics(ai.topics||[]);
+    // 3. insert meeting
+    const cat = categories.find(c=>c.name===ai.category) || categories[0];
+    const { data: meeting, error: mErr } = await supabase.from('meetings').insert({
+      title: $('import-title').value.trim() || ai.title,
+      meeting_date: $('import-date').value,
+      category_id: cat.id,
+      topic_ids: topicIds,
+      transcript_raw: transcript,
+      status: 'draft',
+    }).select().single();
+    if(mErr) throw mErr;
+    // 4. store original file (best-effort)
+    if(fileToStore){
+      const path = `${meeting.id}/${fileToStore.name}`;
+      const { error: sErr } = await supabase.storage.from('meeting-files').upload(path, fileToStore);
+      if(!sErr) await supabase.from('meetings').update({ transcript_file_path: path }).eq('id', meeting.id);
+    } else {
+      const blob = new Blob([transcript], {type:'text/plain'});
+      const path = `${meeting.id}/transcript.txt`;
+      const { error: sErr } = await supabase.storage.from('meeting-files').upload(path, blob);
+      if(!sErr) await supabase.from('meetings').update({ transcript_file_path: path }).eq('id', meeting.id);
+    }
+    // 5. insert summary
+    const { error: suErr } = await supabase.from('summaries').insert({
+      meeting_id: meeting.id,
+      content: ai.content,
+      short_summary: ai.short_summary || null,
+      open_actions: ai.open_actions || [],
+    });
+    if(suErr) throw suErr;
+    $('import-modal').classList.add('hidden');
+    await loadAll();
+    toast('サマリーを生成しました。内容を確認して確定してください');
+    openSummary(meeting.id);
+  }catch(err){
+    console.error(err);
+    toast('エラー: ' + (err.message||err), true);
+  }finally{
+    btn.disabled = false; btn.textContent = '取り込んで生成';
+  }
+};
+
+async function resolveTopics(names){
+  const ids = [];
+  for(const name of names.slice(0,4)){
+    let t = topics.find(t=>t.name===name);
+    if(!t){
+      const { data, error } = await supabase.from('topics').insert({ name }).select().single();
+      if(error) continue;
+      t = data; topics.push(t);
+    }
+    ids.push(t.id);
+  }
+  return ids;
+}
+
+/* ============ CLAUDE API ============ */
+async function callClaude(system, user, maxTokens=4000){
+  const key = localStorage.getItem('ml_anthropic_key');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key': key,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true',
+    },
+    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: maxTokens, system, messages:[{role:'user',content:user}] }),
+  });
+  if(!res.ok){
+    const e = await res.json().catch(()=>({}));
+    throw new Error('Claude API: ' + (e.error?.message || res.status));
+  }
+  const data = await res.json();
+  return data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
+}
+
+function templateSections(cat){
+  const map = {
+    decisions:'決定事項', actions:'アクション', open_issues:'継続論点',
+    discussion_points:'議論の要点', agreements:'合意事項', mutual_actions:'双方のアクション',
+    purpose:'目的', points:'要点',
+  };
+  return (cat.template?.sections||[]).map(k=>({key:k, label:map[k]||k}));
+}
+
+async function generateFromTranscript(transcript, userTitle){
+  const catList = categories.map(c=>`- ${c.name}`).join('\n');
+  const topicList = topics.map(t=>t.name).join(', ') || '(まだ登録なし)';
+  const catTemplates = categories.map(c=>{
+    if(c.template?.sections) return `「${c.name}」→ contentのキー: ${c.template.sections.join(', ')}`;
+    if(c.template?.max_length) return `「${c.name}」→ contentのキー: overview(通常の概要)。加えてshort_summaryに140字程度の超短縮概要`;
+    if(c.template?.format==='dialogue_log') return `「${c.name}」→ MVPでは通常形式で: contentのキー: purpose, points, actions`;
+    return '';
+  }).filter(Boolean).join('\n');
+  const system = `あなたはミーティング記録の整理アシスタントです。文字起こしから構造化サマリーを作ります。必ずJSONのみを返してください(前置き・マークダウン記法・コードフェンス禁止)。`;
+  const user = `以下のミーティング文字起こしを分析してください。
+
+## カテゴリ候補(必ずこの中から1つ選ぶ)
+${catList}
+
+## カテゴリ別のサマリー構成
+${catTemplates}
+
+## 既存トピック(該当があれば再利用、なければ新規トピック名を提案。最大3つ、短い名詞句で)
+${topicList}
+
+## 出力JSON形式
+{
+  "title": "${userTitle ? userTitle : 'ミーティングの内容を表す簡潔なタイトル(日本語)'}",
+  "category": "カテゴリ名(上記候補から完全一致で)",
+  "topics": ["トピック名", ...],
+  "content": { "セクションキー": "本文(日本語、箇条書きは・で改行区切り)", ... },
+  "short_summary": "クラス(SCCP/FBS)の場合のみ140字程度の概要。それ以外はnull",
+  "open_actions": [ {"text":"やること","owner":"担当(不明なら空)","due":null,"done":false}, ... ]
+}
+
+## 文字起こし
+${transcript.slice(0, 150000)}`;
+  const raw = await callClaude(system, user, 4000);
+  const clean = raw.replace(/```json|```/g,'').trim();
+  const parsed = JSON.parse(clean);
+  if(userTitle) parsed.title = userTitle;
+  return parsed;
+}
+
+/* ============ SUMMARY SCREEN ============ */
+async function openSummary(meetingId){
+  const { data: m, error } = await supabase.from('meetings')
+    .select('*, summaries(*)').eq('id', meetingId).single();
+  if(error){ toast('読込エラー: '+error.message, true); return; }
+  currentMeeting = m;
+  currentSummary = Array.isArray(m.summaries) ? m.summaries[0] : m.summaries;
+  editMode = m.status === 'draft';
+  $('page-home').classList.add('hidden');
+  $('page-summary').classList.remove('hidden');
+  renderSummary();
+  window.scrollTo(0,0);
+}
+$('back-to-home').onclick = ()=>{
+  $('page-summary').classList.add('hidden');
+  $('page-home').classList.remove('hidden');
+  loadMeetings();
+};
+
+function renderSummary(){
+  const m = currentMeeting, s = currentSummary;
+  const cat = categories.find(c=>c.id===m.category_id);
+  const tnames = (m.topic_ids||[]).map(id=>topics.find(t=>t.id===id)?.name).filter(Boolean);
+  $('sum-title').textContent = m.title;
+  $('sum-meta').innerHTML = `${fmtDate(m.meeting_date)} · <span class="badge ${catBadgeClass(cat)}"><span class="badge-dot"></span>${esc(cat?.name||'')}</span> · <span class="status-pill ${m.status==='confirmed'?'status-confirmed':'status-draft'}">${m.status==='confirmed'?'確定済み':'下書き'}</span>`;
+
+  const main = $('sum-main-col'); const side = $('sum-side-col');
+  const content = s?.content || {};
+  const sections = templateSections(cat||{}).length ? templateSections(cat) : Object.keys(content).map(k=>({key:k,label:k}));
+
+  // main panel
+  let html = `<div class="panel"><h3>サマリー ${editMode?'(編集可)':''}</h3>`;
+  sections.forEach((sec,i)=>{
+    const val = content[sec.key] ?? '';
+    html += `<div class="block"><div class="field-label">${esc(sec.label)}</div>`;
+    if(editMode){
+      html += `<textarea class="field-edit" data-key="${esc(sec.key)}">${esc(val)}</textarea>`;
+    } else {
+      html += `<div class="field-body">${esc(val).replace(/\n/g,'<br>')}</div>`;
+    }
+    html += `</div>`;
+  });
+  html += `</div>`;
+
+  // open actions
+  const actions = s?.open_actions || [];
+  if(actions.length || editMode){
+    html += `<div class="panel"><h3>アクション</h3>`;
+    actions.forEach((a,i)=>{
+      html += `<div class="action-row">
+        <input type="checkbox" data-action-idx="${i}" ${a.done?'checked':''} ${editMode?'':'disabled'} style="margin-top:3px;">
+        <div class="action-text">${esc(a.text)}${a.owner?`<div class="action-owner">担当: ${esc(a.owner)}</div>`:''}</div>
+      </div>`;
+    });
+    if(!actions.length) html += `<div class="empty-note" style="padding:10px 0;">アクションはありません</div>`;
+    html += `</div>`;
+  }
+
+  // notes
+  html += `<div class="panel"><h3>追記メモ</h3>
+    <textarea class="notes-box" id="user-notes" ${m.status==='confirmed'?'':''} placeholder="補足・気づきを追記…">${esc(s?.user_notes||'')}</textarea>
+    <div style="margin-top:10px;text-align:right;"><button class="btn btn-sm" id="save-notes-btn">メモを保存</button></div>
+  </div>`;
+  main.innerHTML = html;
+
+  // side panel
+  let sideHtml = '';
+  if(m.status==='draft'){
+    sideHtml += `<div class="panel">
+      <p class="side-panel-title">確認して確定</p>
+      <p class="side-panel-sub">確定すると文字起こし原文は削除され、元ファイルのみStorageに残ります。</p>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;" id="confirm-btn">サマリーを確定する</button>
+      <div style="margin-top:10px;"><button class="btn btn-sm" style="width:100%;justify-content:center;" id="save-draft-btn">編集を保存(下書きのまま)</button></div>
+    </div>`;
+    // category change
+    sideHtml += `<div class="panel"><p class="side-panel-title">カテゴリ</p><p class="side-panel-sub">AI判定が違っていたら変更できます</p>
+      <select id="cat-select">${categories.map(c=>`<option value="${c.id}" ${c.id===m.category_id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>`;
+  }
+  // exit box
+  if(cat?.output_type==='copy_short'){
+    sideHtml += `<div class="exit-box"><div class="lbl">出口: Creating Roomへコピー</div>
+      <div class="exp">クラス録画ページに貼り付ける140字概要です。</div>
+      <div style="font-size:12.5px;line-height:1.7;background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:10px;" id="short-sum-text">${esc(s?.short_summary||'(未生成)')}</div>
+      <button class="btn btn-sm btn-primary" id="copy-short-btn">📋 コピー</button></div>`;
+  }
+  sideHtml += `<div class="panel"><p class="side-panel-title">トピック</p>
+    <div class="tag-row">${tnames.length?tnames.map(n=>`<span class="tag">${esc(n)}</span>`).join(''):'<span class="empty-note" style="padding:0;">なし</span>'}</div></div>`;
+  if(m.status==='draft'){
+    sideHtml += `<div class="panel"><button class="btn btn-sm btn-danger" style="width:100%;justify-content:center;" id="delete-btn">このミーティングを削除</button></div>`;
+  }
+  side.innerHTML = sideHtml;
+
+  // wire events
+  $('save-notes-btn').onclick = saveNotes;
+  const confirmBtn = $('confirm-btn'); if(confirmBtn) confirmBtn.onclick = confirmMeeting;
+  const saveDraftBtn = $('save-draft-btn'); if(saveDraftBtn) saveDraftBtn.onclick = ()=>saveDraft(true);
+  const catSel = $('cat-select'); if(catSel) catSel.onchange = changeCategory;
+  const copyBtn = $('copy-short-btn'); if(copyBtn) copyBtn.onclick = ()=>{
+    navigator.clipboard.writeText(currentSummary?.short_summary||'').then(()=>toast('コピーしました'));
+  };
+  const delBtn = $('delete-btn'); if(delBtn) delBtn.onclick = deleteMeeting;
+  document.querySelectorAll('[data-action-idx]').forEach(cb=>{
+    cb.onchange = async e=>{
+      const idx = +e.target.dataset.actionIdx;
+      currentSummary.open_actions[idx].done = e.target.checked;
+      await supabase.from('summaries').update({ open_actions: currentSummary.open_actions }).eq('id', currentSummary.id);
+    };
+  });
+}
+
+function collectEdits(){
+  const content = { ...(currentSummary?.content||{}) };
+  document.querySelectorAll('.field-edit[data-key]').forEach(ta=>{ content[ta.dataset.key] = ta.value; });
+  return content;
+}
+async function saveDraft(showToast){
+  if(!currentSummary) return;
+  const content = collectEdits();
+  const { error } = await supabase.from('summaries').update({ content, user_notes: $('user-notes').value }).eq('id', currentSummary.id);
+  if(error){ toast('保存エラー: '+error.message, true); return false; }
+  currentSummary.content = content;
+  if(showToast) toast('保存しました');
+  return true;
+}
+async function saveNotes(){
+  if(!currentSummary) return;
+  const { error } = await supabase.from('summaries').update({ user_notes: $('user-notes').value }).eq('id', currentSummary.id);
+  if(error) toast('保存エラー: '+error.message, true); else toast('メモを保存しました');
+}
+async function changeCategory(){
+  const newCatId = $('cat-select').value;
+  const { error } = await supabase.from('meetings').update({ category_id: newCatId }).eq('id', currentMeeting.id);
+  if(error){ toast('変更エラー: '+error.message, true); return; }
+  currentMeeting.category_id = newCatId;
+  toast('カテゴリを変更しました');
+  renderSummary();
+}
+async function confirmMeeting(){
+  if(!confirm('確定すると文字起こし原文が削除されます(元ファイルはStorageに残ります)。よろしいですか?')) return;
+  const ok = await saveDraft(false); if(!ok) return;
+  const now = new Date().toISOString();
+  const { error: e1 } = await supabase.from('meetings').update({ status:'confirmed', transcript_raw: null }).eq('id', currentMeeting.id);
+  if(e1){ toast('確定エラー: '+e1.message, true); return; }
+  await supabase.from('summaries').update({ confirmed_at: now }).eq('id', currentSummary.id);
+  currentMeeting.status = 'confirmed';
+  editMode = false;
+  toast('確定しました');
+  renderSummary();
+}
+async function deleteMeeting(){
+  if(!confirm('このミーティングとサマリーを完全に削除します。よろしいですか?')) return;
+  const { error } = await supabase.from('meetings').delete().eq('id', currentMeeting.id);
+  if(error){ toast('削除エラー: '+error.message, true); return; }
+  toast('削除しました');
+  $('back-to-home').click();
+}
+
+init();
+</script>
+</body>
+</html>
