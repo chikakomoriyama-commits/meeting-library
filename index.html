@@ -201,6 +201,7 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
           <input type="text" id="search-input" placeholder="タイトル・サマリー内容で検索…">
         </div>
+        <button class="btn btn-sm" id="sort-btn">↓ 新しい順</button>
       </div>
       <div class="cat-tabs" id="cat-tabs"></div>
       <div class="list" id="meeting-list"></div>
@@ -280,6 +281,7 @@ let categories = [];      // meeting_categories rows
 let topics = [];          // topics rows
 let meetings = [];        // meetings joined w/ summaries excerpt
 let activeCatId = 'all';
+let sortDesc = true;  // true=新しい順
 let currentMeeting = null;   // meeting row being viewed
 let currentSummary = null;   // summaries row
 let editMode = false;
@@ -382,6 +384,9 @@ function renderList(){
       if(!hay.includes(q)) return false;
     }
     return true;
+  }).sort((a,b)=>{
+    const cmp = a.meeting_date.localeCompare(b.meeting_date) || a.created_at.localeCompare(b.created_at);
+    return sortDesc ? -cmp : cmp;
   });
   if(!rows.length){ el.innerHTML = '<div class="empty-note">ミーティングはまだありません。「＋ 文字起こしを取り込む」から始めましょう。</div>'; return; }
   rows.forEach(m=>{
@@ -407,6 +412,11 @@ function renderList(){
   });
 }
 $('search-input').addEventListener('input', renderList);
+$('sort-btn').onclick = ()=>{
+  sortDesc = !sortDesc;
+  $('sort-btn').textContent = sortDesc ? '↓ 新しい順' : '↑ 古い順';
+  renderList();
+};
 
 /* ============ IMPORT ============ */
 let importedFile = null;
@@ -584,7 +594,7 @@ ${topicList}
   "title": "${userTitle ? userTitle : 'ミーティングの内容を表す簡潔なタイトル(日本語)'}",
   "category": "カテゴリ名(上記候補から完全一致で)",
   "topics": ["トピック名", ...],
-  "content": { "セクションキー": "本文(日本語、箇条書きは・で改行区切り)", ... },
+  "content": { "セクションキー": "本文(日本語)。箇条書きの場合は各項目を「・」で始め、項目ごとに必ず改行(\\n)で区切る。1項目は1〜2文で簡潔に", ... },
   "short_summary": "クラス(SCCP/FBS)の場合のみ140字程度の概要。それ以外はnull",
   "open_actions": [ {"text":"やること","owner":"担当(不明なら空)","due":null,"done":false}, ... ]
 }
@@ -718,9 +728,7 @@ function renderSummary(){
     <button class="btn btn-sm btn-primary" id="print-btn">🖨 A4版を開く(PDF保存)</button></div>`;
   sideHtml += `<div class="panel"><p class="side-panel-title">トピック</p>
     <div class="tag-row">${tnames.length?tnames.map(n=>`<span class="tag">${esc(n)}</span>`).join(''):'<span class="empty-note" style="padding:0;">なし</span>'}</div></div>`;
-  if(m.status==='draft'){
-    sideHtml += `<div class="panel"><button class="btn btn-sm btn-danger" style="width:100%;justify-content:center;" id="delete-btn">このミーティングを削除</button></div>`;
-  }
+  sideHtml += `<div class="panel"><button class="btn btn-sm btn-danger" style="width:100%;justify-content:center;" id="delete-btn">このミーティングを削除</button></div>`;
   side.innerHTML = sideHtml;
 
   // wire events
@@ -764,7 +772,7 @@ async function remapToCategory(){
   btn.disabled = true; btn.innerHTML = '<span class="spinner dark"></span> 整形中…';
   try{
     const system = 'あなたはミーティングサマリーの整理アシスタントです。必ずJSONのみを返してください(前置き・コードフェンス禁止)。';
-    const user = `以下の既存サマリーの内容を、新しいカテゴリ「${cat.name}」の形式に整理し直してください。情報は削らず再配置してください。
+    const user = `以下の既存サマリーの内容を、新しいカテゴリ「${cat.name}」の形式に整理し直してください。情報は削らず再配置してください。箇条書きは各項目を「・」で始め、項目ごとに必ず改行(\\n)で区切ってください。
 
 ## 出力JSON形式(キーはこの通りに)
 { ${tpl.map(s=>`"${s.key}": "本文"`).join(', ')} }
