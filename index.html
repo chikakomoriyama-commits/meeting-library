@@ -295,11 +295,31 @@ function toast(msg, isErr=false){
   setTimeout(()=>t.className='toast', isErr?4200:2400);
 }
 function esc(s){ return (s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-// AIの出力に改行が入らない場合があるため、「・」の手前で改行を補う
+// 箇条書きマーカーは「■」。中黒「・」は語句の並列専用なので改行判定に使わない。
+// 旧データ(「・」を箇条書きマーカーにしていた頃のもの)のみ、文末表現で区切って■に変換する。
+const SENT_END = /[。！？!?）)\]】」』]$/;
+const VERB_END = /[たるいすだうねよ]$/;
 function normalizeBullets(s){
   if(!s) return '';
-  if(!s.includes('・')) return s;
-  return s.replace(/\s*・\s*/g, '\n・').replace(/^\n/, '').trim();
+  if(s.includes('■')) return s;             // 新形式はそのまま
+  if(!s.startsWith('・')) return s;          // 箇条書きでない文章は対象外
+  // --- 以下は旧データの救済 ---
+  if(s.includes('\n')) return s.replace(/^・/gm, '■');
+  const out = [];
+  let seg = '';
+  for(let i=0; i<s.length; i++){
+    const ch = s[i];
+    if(ch === '・' && i > 0){
+      const prev = seg.slice(-1);
+      const looksBoundary = SENT_END.test(prev) || VERB_END.test(prev);
+      if(looksBoundary && seg.replace(/^[・■]/,'').length >= 12){
+        out.push(seg); seg = '■'; continue;
+      }
+    }
+    seg += ch;
+  }
+  if(seg) out.push(seg);
+  return out.join('\n').replace(/^・/, '■').trim();
 }
 function bodyHtml(s){ return esc(normalizeBullets(s)).replace(/\n/g,'<br>'); }
 function fmtDate(d){ if(!d) return ''; const dt = new Date(d+'T00:00:00'); return `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}`; }
@@ -412,7 +432,7 @@ function renderList(){
         </div>
         <span class="status-pill ${m.status==='confirmed'?'status-confirmed':'status-draft'}">${m.status==='confirmed'?'確定済み':'下書き'}</span>
       </div>
-      <p class="card-excerpt">${esc(summaryExcerpt(m.summaries).replace(/\s*・\s*/g,' / ').slice(0,140))}</p>
+      <p class="card-excerpt">${esc(normalizeBullets(summaryExcerpt(m.summaries)).replace(/\n?■\s*/g,' / ').replace(/^\s*\/\s*/,'').slice(0,140))}</p>
       <div class="tag-row">${tnames.map(n=>`<span class="tag">${esc(n)}</span>`).join('')}</div>`;
     card.onclick = ()=> openSummary(m.id);
     el.appendChild(card);
@@ -601,7 +621,7 @@ ${topicList}
   "title": "${userTitle ? userTitle : 'ミーティングの内容を表す簡潔なタイトル(日本語)'}",
   "category": "カテゴリ名(上記候補から完全一致で)",
   "topics": ["トピック名", ...],
-  "content": { "セクションキー": "本文(日本語)。箇条書きの場合は各項目を「・」で始め、項目ごとに必ず改行(\\n)で区切る。1項目は1〜2文で簡潔に", ... },
+  "content": { "セクションキー": "本文(日本語)。箇条書きは各項目を「■」で始め、項目の区切りには必ず改行文字を入れる(JSON文字列内では \\\\n)。1項目1〜2文。「・」は語句の並列(例: LINE Works・Zoom)にのみ使い、箇条書きマーカーには使わない", ... },
   "short_summary": "クラス(SCCP/FBS)の場合のみ140字程度の概要。それ以外はnull",
   "open_actions": [ {"text":"やること","owner":"担当(不明なら空)","due":null,"done":false}, ... ]
 }
@@ -779,7 +799,7 @@ async function remapToCategory(){
   btn.disabled = true; btn.innerHTML = '<span class="spinner dark"></span> 整形中…';
   try{
     const system = 'あなたはミーティングサマリーの整理アシスタントです。必ずJSONのみを返してください(前置き・コードフェンス禁止)。';
-    const user = `以下の既存サマリーの内容を、新しいカテゴリ「${cat.name}」の形式に整理し直してください。情報は削らず再配置してください。箇条書きは各項目を「・」で始め、項目ごとに必ず改行(\\n)で区切ってください。
+    const user = `以下の既存サマリーの内容を、新しいカテゴリ「${cat.name}」の形式に整理し直してください。情報は削らず再配置してください。箇条書きは各項目を「■」で始め、項目ごとに必ず改行(\\n)で区切ってください。「・」は語句の並列にのみ使い、箇条書きマーカーには使わないでください。
 
 ## 出力JSON形式(キーはこの通りに)
 { ${tpl.map(s=>`"${s.key}": "本文"`).join(', ')} }
@@ -806,18 +826,22 @@ function collectEdits(){
   return content;
 }
 async function saveDraft(showToast){
-  if(!currentSummary) return;
+  if(!currentSummary){ toast('サマリーが読み込まれていません', true); return false; }
   const content = collectEdits();
-  const { error } = await supabase.from('summaries').update({ content, user_notes: $('user-notes').value }).eq('id', currentSummary.id);
+  const notesEl = $('user-notes');
+  const payload = { content };
+  if(notesEl) payload.user_notes = notesEl.value;
+  const { data, error } = await supabase.from('summaries').update(payload).eq('id', currentSummary.id).select();
   if(error){ toast('保存エラー: '+error.message, true); return false; }
-  currentSummary.content = content;
+  if(!data || !data.length){ toast('保存されませんでした(権限エラーの可能性があります)', true); return false; }
+  currentSummary = data[0];
   if(showToast) toast('保存しました');
   return true;
 }
 async function saveNotes(){
-  if(!currentSummary) return;
-  const { error } = await supabase.from('summaries').update({ user_notes: $('user-notes').value }).eq('id', currentSummary.id);
-  if(error) toast('保存エラー: '+error.message, true); else toast('メモを保存しました');
+  // 本文の編集内容も一緒に保存する(編集中にメモだけ保存して本文が失われるのを防ぐ)
+  const ok = await saveDraft(false);
+  if(ok) toast('保存しました');
 }
 async function changeCategory(){
   const newCatId = $('cat-select').value;
