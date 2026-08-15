@@ -413,7 +413,15 @@ $('drop-zone').ondragover = e=>{ e.preventDefault(); $('drop-zone').classList.ad
 $('drop-zone').ondragleave = ()=> $('drop-zone').classList.remove('over');
 $('drop-zone').ondrop = e=>{ e.preventDefault(); $('drop-zone').classList.remove('over'); if(e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); };
 $('file-input').onchange = e=>{ if(e.target.files[0]) setFile(e.target.files[0]); };
-function setFile(f){ importedFile = f; $('drop-zone').textContent = '選択中: ' + f.name; }
+function setFile(f){
+  importedFile = f; $('drop-zone').textContent = '選択中: ' + f.name;
+  // Zoomファイル名から日付を推定: GMT20260815-.../ 2026-08-15 / 20260815
+  const m = f.name.match(/(20\d{2})[-_.]?(\d{2})[-_.]?(\d{2})/);
+  if(m){
+    const iso = `${m[1]}-${m[2]}-${m[3]}`;
+    if(!isNaN(new Date(iso).getTime())) $('import-date').value = iso;
+  }
+}
 
 function parseVTT(text){
   if(!/^WEBVTT/m.test(text)) return text; // plain text
@@ -646,10 +654,27 @@ function renderSummary(){
       <button class="btn btn-primary" style="width:100%;justify-content:center;" id="confirm-btn">サマリーを確定する</button>
       <div style="margin-top:10px;"><button class="btn btn-sm" style="width:100%;justify-content:center;" id="save-draft-btn">編集を保存(下書きのまま)</button></div>
     </div>`;
-    // category change
-    sideHtml += `<div class="panel"><p class="side-panel-title">カテゴリ</p><p class="side-panel-sub">AI判定が違っていたら変更できます</p>
-      <select id="cat-select">${categories.map(c=>`<option value="${c.id}" ${c.id===m.category_id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>`;
+  } else if(!editMode){
+    sideHtml += `<div class="panel">
+      <p class="side-panel-title">確定済み</p>
+      <p class="side-panel-sub">言葉の修正など、あとからの編集ができます。</p>
+      <button class="btn" style="width:100%;justify-content:center;" id="reopen-btn">✏️ 編集を再開する</button>
+    </div>`;
+  } else {
+    sideHtml += `<div class="panel">
+      <p class="side-panel-title">修正中(確定済み)</p>
+      <p class="side-panel-sub">修正を保存すると確定状態のまま内容が更新されます。</p>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;" id="save-fix-btn">修正を保存</button>
+      <div style="margin-top:10px;"><button class="btn btn-sm btn-ghost" style="width:100%;justify-content:center;" id="cancel-fix-btn">キャンセル</button></div>
+    </div>`;
   }
+  // meta edit (category + date): always available
+  sideHtml += `<div class="panel"><p class="side-panel-title">カテゴリ・日付</p><p class="side-panel-sub">間違いに気づいたらいつでも修正できます</p>
+    <select id="cat-select" style="margin-bottom:10px;">${categories.map(c=>`<option value="${c.id}" ${c.id===m.category_id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+    <div style="display:flex;gap:8px;">
+      <input type="date" id="date-edit" value="${esc(m.meeting_date)}" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12.5px;background:var(--surface);color:var(--text);">
+      <button class="btn btn-sm" id="date-save-btn">保存</button>
+    </div></div>`;
   // exit box
   if(cat?.output_type==='copy_short'){
     sideHtml += `<div class="exit-box"><div class="lbl">出口: Creating Roomへコピー</div>
@@ -657,6 +682,10 @@ function renderSummary(){
       <div style="font-size:12.5px;line-height:1.7;background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:10px;" id="short-sum-text">${esc(s?.short_summary||'(未生成)')}</div>
       <button class="btn btn-sm btn-primary" id="copy-short-btn">📋 コピー</button></div>`;
   }
+  // print/PDF export (all categories)
+  sideHtml += `<div class="exit-box"><div class="lbl">出口: 共有用に出力</div>
+    <div class="exp">A4整形版を開き、ブラウザの印刷からPDF保存できます。社外メンバーへの共有用。</div>
+    <button class="btn btn-sm btn-primary" id="print-btn">🖨 A4版を開く(PDF保存)</button></div>`;
   sideHtml += `<div class="panel"><p class="side-panel-title">トピック</p>
     <div class="tag-row">${tnames.length?tnames.map(n=>`<span class="tag">${esc(n)}</span>`).join(''):'<span class="empty-note" style="padding:0;">なし</span>'}</div></div>`;
   if(m.status==='draft'){
@@ -668,7 +697,20 @@ function renderSummary(){
   $('save-notes-btn').onclick = saveNotes;
   const confirmBtn = $('confirm-btn'); if(confirmBtn) confirmBtn.onclick = confirmMeeting;
   const saveDraftBtn = $('save-draft-btn'); if(saveDraftBtn) saveDraftBtn.onclick = ()=>saveDraft(true);
+  const reopenBtn = $('reopen-btn'); if(reopenBtn) reopenBtn.onclick = ()=>{ editMode = true; renderSummary(); };
+  const saveFixBtn = $('save-fix-btn'); if(saveFixBtn) saveFixBtn.onclick = async ()=>{
+    const ok = await saveDraft(false); if(!ok) return;
+    editMode = false; toast('修正を保存しました'); renderSummary();
+  };
+  const cancelFixBtn = $('cancel-fix-btn'); if(cancelFixBtn) cancelFixBtn.onclick = ()=>{ editMode = false; renderSummary(); };
   const catSel = $('cat-select'); if(catSel) catSel.onchange = changeCategory;
+  const dateSaveBtn = $('date-save-btn'); if(dateSaveBtn) dateSaveBtn.onclick = async ()=>{
+    const v = $('date-edit').value; if(!v) return;
+    const { error } = await supabase.from('meetings').update({ meeting_date: v }).eq('id', currentMeeting.id);
+    if(error){ toast('保存エラー: '+error.message, true); return; }
+    currentMeeting.meeting_date = v; toast('日付を変更しました'); renderSummary();
+  };
+  const printBtn = $('print-btn'); if(printBtn) printBtn.onclick = openPrintView;
   const copyBtn = $('copy-short-btn'); if(copyBtn) copyBtn.onclick = ()=>{
     navigator.clipboard.writeText(currentSummary?.short_summary||'').then(()=>toast('コピーしました'));
   };
@@ -727,6 +769,80 @@ async function deleteMeeting(){
   if(error){ toast('削除エラー: '+error.message, true); return; }
   toast('削除しました');
   $('back-to-home').click();
+}
+
+/* ============ PRINT / PDF EXPORT ============ */
+function openPrintView(){
+  const m = currentMeeting, s = currentSummary;
+  const cat = categories.find(c=>c.id===m.category_id);
+  const tnames = (m.topic_ids||[]).map(id=>topics.find(t=>t.id===id)?.name).filter(Boolean);
+  const content = s?.content || {};
+  const sections = templateSections(cat||{}).length ? templateSections(cat) : Object.keys(content).map(k=>({key:k,label:k}));
+  const actions = s?.open_actions || [];
+  const doneCount = actions.filter(a=>a.done).length;
+
+  const secHtml = sections.map(sec=>{
+    const val = content[sec.key];
+    if(!val) return '';
+    return `<div class="sec">
+      <div class="sec-head">${esc(sec.label)}</div>
+      <div class="sec-body">${esc(val).replace(/\n/g,'<br>')}</div>
+    </div>`;
+  }).join('');
+
+  const actHtml = actions.length ? `
+    <div class="sec">
+      <div class="sec-head">アクション <span class="act-count">${doneCount}/${actions.length} 完了</span></div>
+      <div class="act-bar"><div class="act-bar-fill" style="width:${actions.length?Math.round(doneCount/actions.length*100):0}%"></div></div>
+      <table class="act-table">
+        <tr><th style="width:28px;"></th><th>内容</th><th style="width:110px;">担当</th></tr>
+        ${actions.map(a=>`<tr><td class="chk">${a.done?'✔':'□'}</td><td>${esc(a.text)}</td><td>${esc(a.owner||'—')}</td></tr>`).join('')}
+      </table>
+    </div>` : '';
+
+  const notesHtml = s?.user_notes ? `<div class="sec"><div class="sec-head">補足メモ</div><div class="sec-body">${esc(s.user_notes).replace(/\n/g,'<br>')}</div></div>` : '';
+
+  const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${esc(m.title)}</title>
+  <style>
+    @page{ size:A4; margin:18mm 16mm; }
+    body{ font-family:"Noto Sans JP","Hiragino Sans",sans-serif; color:#2E2A22; margin:0; font-size:11.5pt; line-height:1.8; }
+    .head-band{ border-left:6px solid #C17A4E; padding:2px 0 2px 14px; margin-bottom:6mm; }
+    .head-band h1{ font-size:16pt; margin:0 0 4px; }
+    .head-meta{ font-size:9.5pt; color:#948B78; display:flex; gap:14px; flex-wrap:wrap; }
+    .cat-chip{ display:inline-block; background:#F3E3D5; color:#9C5A32; font-weight:700; font-size:8.5pt; padding:1px 10px; border-radius:99px; }
+    .topic-chip{ display:inline-block; background:#EDEAE2; color:#6b6355; font-size:8.5pt; padding:1px 9px; border-radius:6px; margin-right:4px; }
+    .sec{ margin-bottom:6mm; break-inside:avoid; }
+    .sec-head{ font-size:10pt; font-weight:700; color:#9C5A32; border-bottom:1.5px solid #E9E2D3; padding-bottom:3px; margin-bottom:6px; letter-spacing:.04em; }
+    .sec-body{ font-size:10.5pt; }
+    .act-count{ float:right; font-weight:600; color:#7C8A6A; font-size:9pt; }
+    .act-bar{ height:6px; background:#EDEAE2; border-radius:3px; margin-bottom:8px; overflow:hidden; }
+    .act-bar-fill{ height:100%; background:#7C8A6A; border-radius:3px; }
+    .act-table{ width:100%; border-collapse:collapse; font-size:10pt; }
+    .act-table th{ text-align:left; font-size:8.5pt; color:#948B78; border-bottom:1px solid #E9E2D3; padding:3px 6px; font-weight:700; }
+    .act-table td{ border-bottom:1px solid #F0EBDE; padding:5px 6px; vertical-align:top; }
+    .act-table .chk{ text-align:center; color:#7C8A6A; font-weight:700; }
+    .foot{ margin-top:8mm; padding-top:3mm; border-top:1px solid #E9E2D3; font-size:8.5pt; color:#B9B0A0; }
+    .print-hint{ background:#F5EBD3; color:#8A6A1F; font-size:9.5pt; padding:8px 14px; border-radius:8px; margin-bottom:6mm; }
+    @media print{ .print-hint{ display:none; } }
+  </style></head><body>
+  <div class="print-hint">このページをブラウザの印刷(⌘P / Ctrl+P)で「PDFとして保存」してください。この帯は印刷されません。</div>
+  <div class="head-band">
+    <h1>${esc(m.title)}</h1>
+    <div class="head-meta">
+      <span>${fmtDate(m.meeting_date)}</span>
+      <span class="cat-chip">${esc(cat?.name||'')}</span>
+      <span>${tnames.map(n=>`<span class="topic-chip">${esc(n)}</span>`).join('')}</span>
+    </div>
+  </div>
+  ${secHtml}
+  ${actHtml}
+  ${notesHtml}
+  <div class="foot">Meeting Library — Robert Fritz Consulting Japan</div>
+  <script>window.onload=()=>{ /* auto-open print dialog after fonts settle */ setTimeout(()=>window.print(), 400); };<\/script>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if(!w){ toast('ポップアップがブロックされました。許可してください', true); return; }
+  w.document.write(html); w.document.close();
 }
 
 init();
