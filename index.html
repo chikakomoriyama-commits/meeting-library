@@ -371,7 +371,7 @@ async function loadAll(){
 }
 async function loadMeetings(){
   const { data, error } = await supabase.from('meetings')
-    .select('id,title,meeting_date,category_id,topic_ids,status,created_at, summaries(id,content,short_summary,open_actions,user_notes,confirmed_at), attachments(id)')
+    .select('id,title,meeting_date,category_id,topic_ids,attendees,status,created_at, summaries(id,content,short_summary,open_actions,user_notes,confirmed_at), attachments(id)')
     .order('meeting_date',{ascending:false}).order('created_at',{ascending:false});
   if(error){ toast('読込エラー: '+error.message, true); return; }
   meetings = data;
