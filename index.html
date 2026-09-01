@@ -199,7 +199,7 @@
       <div class="toolbar">
         <div class="search">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-          <input type="text" id="search-input" placeholder="タイトル・サマリー内容で検索…">
+          <input type="text" id="search-input" placeholder="タイトル・サマリー・出席者・トピックで検索…">
         </div>
         <button class="btn btn-sm" id="sort-btn">↓ 新しい順</button>
       </div>
@@ -407,7 +407,10 @@ function renderList(){
     if(activeCatId!=='all' && m.category_id!==activeCatId) return false;
     if(q){
       const s = m.summaries;
-      const hay = (m.title + ' ' + summaryExcerpt(s) + ' ' + JSON.stringify(s?.content||{})).toLowerCase();
+      const tnames = (m.topic_ids||[]).map(id=>topics.find(t=>t.id===id)?.name).filter(Boolean).join(' ');
+      const att = (m.attendees||[]).join(' ');
+      const owners = (s?.open_actions||[]).map(a=>a.owner||'').join(' ');
+      const hay = (m.title + ' ' + att + ' ' + tnames + ' ' + owners + ' ' + summaryExcerpt(s) + ' ' + JSON.stringify(s?.content||{})).toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
@@ -434,7 +437,7 @@ function renderList(){
         <span class="status-pill ${m.status==='confirmed'?'status-confirmed':'status-draft'}">${m.status==='confirmed'?'確定済み':'下書き'}</span>
       </div>
       <p class="card-excerpt">${esc(normalizeBullets(summaryExcerpt(m.summaries)).replace(/\n?■\s*/g,' / ').replace(/^\s*\/\s*/,'').slice(0,140))}</p>
-      <div class="tag-row">${tnames.map(n=>`<span class="tag">${esc(n)}</span>`).join('')}</div>`;
+      <div class="tag-row">${(m.attendees||[]).map(n=>`<span class="tag" style="background:var(--surface);border:1px solid var(--border-soft);">👤 ${esc(n)}</span>`).join('')}${tnames.map(n=>`<span class="tag">${esc(n)}</span>`).join('')}</div>`;
     card.onclick = ()=> openSummary(m.id);
     el.appendChild(card);
   });
