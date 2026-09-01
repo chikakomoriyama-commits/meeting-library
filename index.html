@@ -516,6 +516,7 @@ $('import-go').onclick = async ()=>{
       meeting_date: $('import-date').value,
       category_id: cat.id,
       topic_ids: topicIds,
+      attendees: ai.attendees || [],
       transcript_raw: transcript,
       status: 'draft',
     }).select().single();
@@ -617,11 +618,15 @@ ${catTemplates}
 ## 既存トピック(該当があれば再利用、なければ新規トピック名を提案。最大3つ、短い名詞句で)
 ${topicList}
 
+## 出席者
+文字起こしの発言者名や文中の呼びかけから出席者を抽出する(敬称は「さん」に統一。VTTの話者ラベルがあれば優先。不明なら空配列)
+
 ## 出力JSON形式
 {
   "title": "${userTitle ? userTitle : 'ミーティングの内容を表す簡潔なタイトル(日本語)'}",
   "category": "カテゴリ名(上記候補から完全一致で)",
   "topics": ["トピック名", ...],
+  "attendees": ["出席者名", ...],
   "content": { "セクションキー": "本文(日本語)。箇条書きは各項目を「■」で始め、項目の区切りには必ず改行文字を入れる(JSON文字列内では \\\\n)。1項目1〜2文。「・」は語句の並列(例: LINE Works・Zoom)にのみ使い、箇条書きマーカーには使わない", ... },
   "short_summary": "クラス(SCCP/FBS)の場合のみ140字程度の概要。それ以外はnull",
   "open_actions": [ {"text":"やること","owner":"担当(不明なら空)","due":null,"done":false}, ... ]
@@ -744,7 +749,11 @@ function renderSummary(){
     </div>`;
   }
   // meta edit (category + date): always available
-  sideHtml += `<div class="panel"><p class="side-panel-title">カテゴリ・日付</p><p class="side-panel-sub">間違いに気づいたらいつでも修正できます</p>
+  sideHtml += `<div class="panel"><p class="side-panel-title">タイトル・カテゴリ・日付</p><p class="side-panel-sub">間違いに気づいたらいつでも修正できます</p>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input type="text" id="title-edit" value="${esc(m.title)}" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12.5px;background:var(--surface);color:var(--text);">
+      <button class="btn btn-sm" id="title-save-btn">保存</button>
+    </div>
     <select id="cat-select" style="margin-bottom:10px;">${categories.map(c=>`<option value="${c.id}" ${c.id===m.category_id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
     <div style="display:flex;gap:8px;">
       <input type="date" id="date-edit" value="${esc(m.meeting_date)}" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12.5px;background:var(--surface);color:var(--text);">
@@ -761,6 +770,13 @@ function renderSummary(){
   sideHtml += `<div class="exit-box"><div class="lbl">出口: 共有用に出力</div>
     <div class="exp">A4整形版を開き、ブラウザの印刷からPDF保存できます。社外メンバーへの共有用。</div>
     <button class="btn btn-sm btn-primary" id="print-btn">🖨 A4版を開く(PDF保存)</button></div>`;
+  const attendees = m.attendees || [];
+  sideHtml += `<div class="panel"><p class="side-panel-title">出席者</p>
+    <div class="tag-row" style="margin-bottom:10px;">${attendees.length?attendees.map(n=>`<span class="tag">${esc(n)}</span>`).join(''):'<span class="empty-note" style="padding:0;">未登録</span>'}</div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="attendees-edit" value="${esc(attendees.join('、'))}" placeholder="名前を「、」区切りで" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12.5px;background:var(--surface);color:var(--text);">
+      <button class="btn btn-sm" id="attendees-save-btn">保存</button>
+    </div></div>`;
   sideHtml += `<div class="panel"><p class="side-panel-title">トピック</p>
     <div class="tag-row">${tnames.length?tnames.map(n=>`<span class="tag">${esc(n)}</span>`).join(''):'<span class="empty-note" style="padding:0;">なし</span>'}</div></div>`;
   sideHtml += `<div class="panel"><button class="btn btn-sm btn-danger" style="width:100%;justify-content:center;" id="delete-btn">このミーティングを削除</button></div>`;
@@ -782,6 +798,18 @@ function renderSummary(){
     const { error } = await supabase.from('meetings').update({ meeting_date: v }).eq('id', currentMeeting.id);
     if(error){ toast('保存エラー: '+error.message, true); return; }
     currentMeeting.meeting_date = v; toast('日付を変更しました'); renderSummary();
+  };
+  const titleSaveBtn = $('title-save-btn'); if(titleSaveBtn) titleSaveBtn.onclick = async ()=>{
+    const v = $('title-edit').value.trim(); if(!v){ toast('タイトルを入力してください', true); return; }
+    const { error } = await supabase.from('meetings').update({ title: v }).eq('id', currentMeeting.id);
+    if(error){ toast('保存エラー: '+error.message, true); return; }
+    currentMeeting.title = v; toast('タイトルを変更しました'); renderSummary();
+  };
+  const attendeesSaveBtn = $('attendees-save-btn'); if(attendeesSaveBtn) attendeesSaveBtn.onclick = async ()=>{
+    const arr = $('attendees-edit').value.split(/[、,]/).map(s=>s.trim()).filter(Boolean);
+    const { error } = await supabase.from('meetings').update({ attendees: arr }).eq('id', currentMeeting.id);
+    if(error){ toast('保存エラー: '+error.message, true); return; }
+    currentMeeting.attendees = arr; toast('出席者を保存しました'); renderSummary();
   };
   const printBtn = $('print-btn'); if(printBtn) printBtn.onclick = openPrintView;
   const copyBtn = $('copy-short-btn'); if(copyBtn) copyBtn.onclick = ()=>{
