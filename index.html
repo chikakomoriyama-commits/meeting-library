@@ -659,6 +659,12 @@ $('back-to-home').onclick = ()=>{
   $('page-home').classList.remove('hidden');
   loadMeetings();
 };
+$('nav-home').onclick = ()=>{
+  $('page-summary').classList.add('hidden');
+  $('page-home').classList.remove('hidden');
+  loadMeetings();
+  window.scrollTo(0,0);
+};
 
 function renderSummary(){
   const m = currentMeeting, s = currentSummary;
