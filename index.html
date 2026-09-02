@@ -1145,8 +1145,7 @@ function openPrintView(){
     <h1>${esc(m.title)}</h1>
     <div class="head-meta">
       <span>${fmtDate(m.meeting_date)}</span>
-      <span class="cat-chip">${esc(cat?.name||'')}</span>
-      <span>${tnames.map(n=>`<span class="topic-chip">${esc(n)}</span>`).join('')}</span>
+      ${(m.attendees&&m.attendees.length)?`<span>出席: ${m.attendees.map(n=>esc(n)).join('、')}</span>`:''}
     </div>
   </div>
   ${secHtml}
