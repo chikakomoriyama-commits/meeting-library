@@ -794,7 +794,8 @@ function renderSummary(){
     <div style="display:flex;gap:8px;">
       <input type="text" id="attendees-edit" value="${esc(attendees.join('、'))}" placeholder="名前を「、」区切りで" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12.5px;background:var(--surface);color:var(--text);">
       <button class="btn btn-sm" id="attendees-save-btn">保存</button>
-    </div></div>`;
+    </div>
+    <button class="btn btn-sm" id="fix-names-btn" style="margin-top:10px;width:100%;">🪄 人名表記をルールで統一し直す</button></div>`;
   sideHtml += `<div class="panel"><p class="side-panel-title">トピック</p>
     <div class="tag-row">${tnames.length?tnames.map(n=>`<span class="tag">${esc(n)}</span>`).join(''):'<span class="empty-note" style="padding:0;">なし</span>'}</div></div>`;
   sideHtml += `<div class="panel"><button class="btn btn-sm btn-danger" style="width:100%;justify-content:center;" id="delete-btn">このミーティングを削除</button></div>`;
@@ -835,6 +836,7 @@ function renderSummary(){
   };
   const delBtn = $('delete-btn'); if(delBtn) delBtn.onclick = deleteMeeting;
   const remapBtn = $('remap-btn'); if(remapBtn) remapBtn.onclick = remapToCategory;
+  const fixNamesBtn = $('fix-names-btn'); if(fixNamesBtn) fixNamesBtn.onclick = fixNames;
   // attachments
   const aDrop = $('attach-drop'), aInput = $('attach-input');
   if(aDrop){
@@ -854,6 +856,49 @@ function renderSummary(){
       toast(e.target.checked ? 'アクションを完了にしました' : 'アクションを未完了に戻しました');
     };
   });
+}
+
+const NAME_RULES = `社内メンバーは敬称なしで次の表記に統一する:
+- チカ(ちか・Chika・森山も同一人物)
+- Danna(田村陽一・Yoichi Tamura・だんなも同一人物)
+- Andrew(堺・Sakai・堺陽一も同一人物)
+- Hiroki(ヒロキも同一人物)
+- ジダマ(児玉・Kodama・児玉貴博も同一人物)
+上記以外の人名はすべて「〇〇さん」と敬称を付けて表記する。`;
+
+async function fixNames(){
+  const key = requireKey(); if(!key) return;
+  if(!confirm('サマリー本文・アクション担当・出席者の人名表記をルールに沿って統一し直します。内容や構成は変わりません。よろしいですか?')) return;
+  const btn = $('fix-names-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner dark"></span> 統一中…';
+  try{
+    const system = 'あなたは文書の人名表記を統一するアシスタントです。必ずJSONのみを返してください(前置き・コードフェンス禁止)。';
+    const user = `以下のデータ内の人名表記を、ルールに沿って統一してください。人名以外の文章・構成・順序・件数は一切変更しないでください。
+
+## 人名の表記ルール
+${NAME_RULES}
+
+## 出力JSON形式(構造は入力と同じまま返す)
+{ "title": "...", "content": {...}, "attendees": [...], "open_actions": [ {"text":"...","owner":"...","due":元の値,"done":元の値}, ... ] }
+
+## 入力データ
+${JSON.stringify({ title: currentMeeting.title, content: currentSummary.content, attendees: currentMeeting.attendees||[], open_actions: currentSummary.open_actions||[] }, null, 2)}`;
+    const raw = await callClaude(system, user, 4000);
+    const fixed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    const acts = (fixed.open_actions||[]).map((a,i)=>({ ...(currentSummary.open_actions?.[i]||{}), text: a.text, owner: a.owner }));
+    const { error: e1 } = await supabase.from('summaries').update({ content: fixed.content, open_actions: acts }).eq('id', currentSummary.id);
+    if(e1) throw e1;
+    const { error: e2 } = await supabase.from('meetings').update({ title: fixed.title, attendees: fixed.attendees||[] }).eq('id', currentMeeting.id);
+    if(e2) throw e2;
+    currentSummary.content = fixed.content; currentSummary.open_actions = acts;
+    currentMeeting.title = fixed.title; currentMeeting.attendees = fixed.attendees||[];
+    toast('人名表記を統一しました');
+    renderSummary();
+  }catch(err){
+    console.error(err);
+    toast('統一エラー: ' + (err.message||err), true);
+    renderSummary();
+  }
 }
 
 async function remapToCategory(){
