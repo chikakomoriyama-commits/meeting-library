@@ -712,7 +712,7 @@ function renderSummary(){
     html += `<div class="panel"><h3>アクション</h3>`;
     actions.forEach((a,i)=>{
       html += `<div class="action-row">
-        <input type="checkbox" data-action-idx="${i}" ${a.done?'checked':''} ${editMode?'':'disabled'} style="margin-top:3px;">
+        <input type="checkbox" data-action-idx="${i}" ${a.done?'checked':''} style="margin-top:3px;cursor:pointer;">
         <div class="action-text">${esc(a.text)}${a.owner?`<div class="action-owner">担当: ${esc(a.owner)}</div>`:''}</div>
       </div>`;
     });
@@ -840,7 +840,9 @@ function renderSummary(){
     cb.onchange = async e=>{
       const idx = +e.target.dataset.actionIdx;
       currentSummary.open_actions[idx].done = e.target.checked;
-      await supabase.from('summaries').update({ open_actions: currentSummary.open_actions }).eq('id', currentSummary.id);
+      const { error } = await supabase.from('summaries').update({ open_actions: currentSummary.open_actions }).eq('id', currentSummary.id);
+      if(error){ toast('保存エラー: '+error.message, true); e.target.checked = !e.target.checked; currentSummary.open_actions[idx].done = e.target.checked; return; }
+      toast(e.target.checked ? 'アクションを完了にしました' : 'アクションを未完了に戻しました');
     };
   });
 }
