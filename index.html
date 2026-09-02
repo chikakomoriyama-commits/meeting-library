@@ -592,7 +592,7 @@ async function callClaude(system, user, maxTokens=4000){
 
 const SECTION_LABELS = {
   decisions:'決定事項', actions:'アクション', open_issues:'継続論点',
-  discussion_points:'議論の要点', agreements:'合意事項', mutual_actions:'双方のアクション',
+  discussion_points:'要点・決定事項', agreements:'合意事項', mutual_actions:'双方のアクション',
   purpose:'目的', points:'要点', overview:'概要',
 };
 function sectionLabel(k){ return SECTION_LABELS[k]||k; }
@@ -632,6 +632,11 @@ ${topicList}
 - Hiroki(ヒロキも同一人物)
 - ジダマ(児玉・Kodama・児玉貴博も同一人物)
 上記以外の人名はすべて「〇〇さん」と敬称を付けて表記する。
+
+## セクション間の重複禁止
+各情報は最も適切な1つの場所にのみ書く。
+- 「要点・決定事項」系のセクションには、議論の経緯と決定・合意した結論をまとめて書く(同じ内容を複数セクションに繰り返さない)
+- open_actionsとして抽出したものは、本文セクションに再掲しない
 
 ## 出力JSON形式
 {
@@ -720,10 +725,21 @@ function renderSummary(){
   if(actions.length || editMode){
     html += `<div class="panel"><h3>アクション</h3>`;
     actions.forEach((a,i)=>{
-      html += `<div class="action-row">
-        <input type="checkbox" data-action-idx="${i}" ${a.done?'checked':''} style="margin-top:3px;cursor:pointer;">
-        <div class="action-text">${esc(a.text)}${a.owner?`<div class="action-owner">担当: ${esc(a.owner)}</div>`:''}</div>
-      </div>`;
+      if(editMode){
+        html += `<div class="action-row" data-action-edit-row="${i}">
+          <input type="checkbox" data-action-idx="${i}" ${a.done?'checked':''} style="margin-top:8px;cursor:pointer;">
+          <div style="flex:1;display:flex;flex-direction:column;gap:5px;">
+            <input type="text" class="action-text-edit" data-idx="${i}" value="${esc(a.text)}" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;background:var(--surface);color:var(--text);">
+            <input type="text" class="action-owner-edit" data-idx="${i}" value="${esc(a.owner||'')}" placeholder="担当" style="width:140px;padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12px;background:var(--surface);color:var(--text-muted);">
+          </div>
+          <button class="btn btn-sm" data-action-del="${i}" title="このアクションを削除" style="margin-top:4px;">✕</button>
+        </div>`;
+      } else {
+        html += `<div class="action-row">
+          <input type="checkbox" data-action-idx="${i}" ${a.done?'checked':''} style="margin-top:3px;cursor:pointer;">
+          <div class="action-text">${esc(a.text)}${a.owner?`<div class="action-owner">担当: ${esc(a.owner)}</div>`:''}</div>
+        </div>`;
+      }
     });
     if(!actions.length) html += `<div class="empty-note" style="padding:10px 0;">アクションはありません</div>`;
     html += `</div>`;
@@ -847,6 +863,15 @@ function renderSummary(){
     aInput.onchange = e=> uploadAttachments(e.target.files);
     loadAttachments();
   }
+  document.querySelectorAll('[data-action-del]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const idx = +btn.dataset.actionDel;
+      if(!confirm('このアクションを削除しますか?')) return;
+      collectActionEdits();
+      currentSummary.open_actions.splice(idx,1);
+      renderSummary();
+    };
+  });
   document.querySelectorAll('[data-action-idx]').forEach(cb=>{
     cb.onchange = async e=>{
       const idx = +e.target.dataset.actionIdx;
@@ -936,11 +961,21 @@ function collectEdits(){
   document.querySelectorAll('.field-edit[data-key]').forEach(ta=>{ content[ta.dataset.key] = ta.value; });
   return content;
 }
+function collectActionEdits(){
+  if(!currentSummary?.open_actions) return;
+  document.querySelectorAll('.action-text-edit[data-idx]').forEach(inp=>{
+    const a = currentSummary.open_actions[+inp.dataset.idx]; if(a) a.text = inp.value;
+  });
+  document.querySelectorAll('.action-owner-edit[data-idx]').forEach(inp=>{
+    const a = currentSummary.open_actions[+inp.dataset.idx]; if(a) a.owner = inp.value;
+  });
+}
 async function saveDraft(showToast){
   if(!currentSummary){ toast('サマリーが読み込まれていません', true); return false; }
   const content = collectEdits();
+  collectActionEdits();
   const notesEl = $('user-notes');
-  const payload = { content };
+  const payload = { content, open_actions: currentSummary.open_actions||[] };
   if(notesEl) payload.user_notes = notesEl.value;
   const { data, error } = await supabase.from('summaries').update(payload).eq('id', currentSummary.id).select();
   if(error){ toast('保存エラー: '+error.message, true); return false; }
