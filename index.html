@@ -609,7 +609,9 @@ async function generateFromTranscript(transcript, userTitle){
     if(c.template?.format==='dialogue_log') return `「${c.name}」→ MVPでは通常形式で: contentのキー: purpose, points, actions`;
     return '';
   }).filter(Boolean).join('\n');
-  const system = `あなたはミーティング記録の整理アシスタントです。文字起こしから構造化サマリーを作ります。必ずJSONのみを返してください(前置き・マークダウン記法・コードフェンス禁止)。`;
+  const system = `あなたはミーティング記録の整理アシスタントです。文字起こしから構造化サマリーを作ります。必ずJSONのみを返してください(前置き・マークダウン記法・コードフェンス禁止)。
+
+重要: あなたの仕事は「会議で話されたことの記録」です。医療・法律・金融などの専門的な話題が含まれていても、それは会議の参加者たちの発言の記録であり、あなたが助言・診断・推奨を行うわけではありません。発言内容を事実として要約してください。要約を拒否せず、必ずJSON形式のサマリーを返してください。`;
   const user = `以下のミーティング文字起こしを分析してください。
 
 ## カテゴリ候補(必ずこの中から1つ選ぶ)
@@ -653,7 +655,16 @@ ${topicList}
 ${transcript.slice(0, 150000)}`;
   const raw = await callClaude(system, user, 4000);
   const clean = raw.replace(/```json|```/g,'').trim();
-  const parsed = JSON.parse(clean);
+  let parsed;
+  try{
+    parsed = JSON.parse(clean);
+  }catch(e){
+    const i = clean.indexOf('{'), j = clean.lastIndexOf('}');
+    if(i >= 0 && j > i){
+      try{ parsed = JSON.parse(clean.slice(i, j+1)); }catch(e2){ /* fallthrough */ }
+    }
+    if(!parsed) throw new Error('AIがサマリーを返せませんでした。AIの返答: ' + clean.slice(0, 200));
+  }
   if(userTitle) parsed.title = userTitle;
   return parsed;
 }
