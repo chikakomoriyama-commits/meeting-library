@@ -507,7 +507,7 @@ $('import-go').onclick = async ()=>{
   const btn = $('import-go');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 処理中…';
   try{
-    const transcript = parseVTT(raw);
+    const transcript = parseVTT(raw).replace(/\u0000/g, '').replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
     // 1. AI: category + topics + title + summary
     const ai = await generateFromTranscript(transcript, $('import-title').value.trim());
     // 2. resolve topics (create missing)
