@@ -653,7 +653,7 @@ ${topicList}
 
 ## 文字起こし
 ${transcript.slice(0, 150000)}`;
-  const raw = await callClaude(system, user, 4000);
+  const raw = await callClaude(system, user, 10000);
   const clean = raw.replace(/```json|```/g,'').trim();
   let parsed;
   try{
@@ -919,7 +919,7 @@ ${NAME_RULES}
 
 ## 入力データ
 ${JSON.stringify({ title: currentMeeting.title, content: currentSummary.content, attendees: currentMeeting.attendees||[], open_actions: currentSummary.open_actions||[] }, null, 2)}`;
-    const raw = await callClaude(system, user, 4000);
+    const raw = await callClaude(system, user, 10000);
     const fixed = JSON.parse(raw.replace(/```json|```/g,'').trim());
     const acts = (fixed.open_actions||[]).map((a,i)=>({ ...(currentSummary.open_actions?.[i]||{}), text: a.text, owner: a.owner }));
     const { error: e1 } = await supabase.from('summaries').update({ content: fixed.content, open_actions: acts }).eq('id', currentSummary.id);
