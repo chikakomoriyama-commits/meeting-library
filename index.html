@@ -587,7 +587,45 @@ async function callClaude(system, user, maxTokens=4000){
     throw new Error('Claude API: ' + (e.error?.message || res.status));
   }
   const data = await res.json();
-  return data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
+  const text = data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
+  if(data.stop_reason === 'max_tokens'){
+    throw new Error('AIの返答が長すぎて途中で切れました(上限 ' + maxTokens + ' トークン)。文字起こしを前半・後半に分けて取り込んでください。');
+  }
+  return text;
+}
+
+/* AIの返答からJSONを取り出す(文字列内の生の改行・タブも修復して読む) */
+function escapeControlCharsInStrings(str){
+  let out = '', inStr = false, esc = false;
+  for(const ch of str){
+    if(inStr){
+      if(esc){ out += ch; esc = false; continue; }
+      if(ch === '\\'){ out += ch; esc = true; continue; }
+      if(ch === '"'){ out += ch; inStr = false; continue; }
+      if(ch === '\n'){ out += '\\n'; continue; }
+      if(ch === '\r'){ out += '\\r'; continue; }
+      if(ch === '\t'){ out += '\\t'; continue; }
+      const c = ch.charCodeAt(0);
+      if(c < 0x20){ out += '\\u' + c.toString(16).padStart(4,'0'); continue; }
+      out += ch;
+    }else{
+      if(ch === '"') inStr = true;
+      out += ch;
+    }
+  }
+  return out;
+}
+function parseAIJson(raw){
+  const clean = raw.replace(/```json|```/g,'').trim();
+  const i = clean.indexOf('{'), j = clean.lastIndexOf('}');
+  const candidates = [clean];
+  if(i >= 0 && j > i) candidates.push(clean.slice(i, j+1));
+  for(const c of candidates){
+    try{ return JSON.parse(c); }catch(e){}
+    try{ return JSON.parse(escapeControlCharsInStrings(c)); }catch(e){}
+  }
+  console.error('AIの返答(全文):', raw);
+  throw new Error('AIの返答をJSONとして読めませんでした(' + clean.length + '文字)。返答の最後: …' + clean.slice(-150));
 }
 
 const SECTION_LABELS = {
@@ -653,18 +691,8 @@ ${topicList}
 
 ## 文字起こし
 ${transcript.slice(0, 150000)}`;
-  const raw = await callClaude(system, user, 10000);
-  const clean = raw.replace(/```json|```/g,'').trim();
-  let parsed;
-  try{
-    parsed = JSON.parse(clean);
-  }catch(e){
-    const i = clean.indexOf('{'), j = clean.lastIndexOf('}');
-    if(i >= 0 && j > i){
-      try{ parsed = JSON.parse(clean.slice(i, j+1)); }catch(e2){ /* fallthrough */ }
-    }
-    if(!parsed) throw new Error('AIがサマリーを返せませんでした。AIの返答: ' + clean.slice(0, 200));
-  }
+  const raw = await callClaude(system, user, 20000);
+  const parsed = parseAIJson(raw);
   if(userTitle) parsed.title = userTitle;
   return parsed;
 }
@@ -919,8 +947,8 @@ ${NAME_RULES}
 
 ## 入力データ
 ${JSON.stringify({ title: currentMeeting.title, content: currentSummary.content, attendees: currentMeeting.attendees||[], open_actions: currentSummary.open_actions||[] }, null, 2)}`;
-    const raw = await callClaude(system, user, 10000);
-    const fixed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    const raw = await callClaude(system, user, 20000);
+    const fixed = parseAIJson(raw);
     const acts = (fixed.open_actions||[]).map((a,i)=>({ ...(currentSummary.open_actions?.[i]||{}), text: a.text, owner: a.owner }));
     const { error: e1 } = await supabase.from('summaries').update({ content: fixed.content, open_actions: acts }).eq('id', currentSummary.id);
     if(e1) throw e1;
@@ -953,8 +981,8 @@ async function remapToCategory(){
 
 ## 既存サマリー
 ${JSON.stringify(currentSummary.content, null, 2)}`;
-    const raw = await callClaude(system, user, 3000);
-    const newContent = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    const raw = await callClaude(system, user, 12000);
+    const newContent = parseAIJson(raw);
     const { error } = await supabase.from('summaries').update({ content: newContent }).eq('id', currentSummary.id);
     if(error) throw error;
     currentSummary.content = newContent;
