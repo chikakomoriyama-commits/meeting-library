@@ -595,13 +595,21 @@ async function callClaude(system, user, maxTokens=4000){
 }
 
 /* AIの返答からJSONを取り出す(文字列内の生の改行・タブも修復して読む) */
-function escapeControlCharsInStrings(str){
+function escapeControlCharsInStrings(str, fixQuotes){
   let out = '', inStr = false, esc = false;
-  for(const ch of str){
+  for(let k = 0; k < str.length; k++){
+    const ch = str[k];
     if(inStr){
       if(esc){ out += ch; esc = false; continue; }
       if(ch === '\\'){ out += ch; esc = true; continue; }
-      if(ch === '"'){ out += ch; inStr = false; continue; }
+      if(ch === '"'){
+        // 文中の " (例: "課題") は文字列の終わりではないのでエスケープする
+        if(fixQuotes){
+          let m = k + 1; while(m < str.length && /\s/.test(str[m])) m++;
+          if(m < str.length && !',:}]'.includes(str[m])){ out += '\\"'; continue; }
+        }
+        out += ch; inStr = false; continue;
+      }
       if(ch === '\n'){ out += '\\n'; continue; }
       if(ch === '\r'){ out += '\\r'; continue; }
       if(ch === '\t'){ out += '\\t'; continue; }
@@ -622,7 +630,8 @@ function parseAIJson(raw){
   if(i >= 0 && j > i) candidates.push(clean.slice(i, j+1));
   for(const c of candidates){
     try{ return JSON.parse(c); }catch(e){}
-    try{ return JSON.parse(escapeControlCharsInStrings(c)); }catch(e){}
+    try{ return JSON.parse(escapeControlCharsInStrings(c, false)); }catch(e){}
+    try{ return JSON.parse(escapeControlCharsInStrings(c, true)); }catch(e){}
   }
   console.error('AIの返答(全文):', raw);
   throw new Error('AIの返答をJSONとして読めませんでした(' + clean.length + '文字)。返答の最後: …' + clean.slice(-150));
@@ -684,7 +693,7 @@ ${topicList}
   "category": "カテゴリ名(上記候補から完全一致で)",
   "topics": ["トピック名", ...],
   "attendees": ["出席者名", ...],
-  "content": { "セクションキー": "本文(日本語)。箇条書きは各項目を「■」で始め、項目の区切りには必ず改行文字を入れる(JSON文字列内では \\\\n)。1項目1〜2文。「・」は語句の並列(例: LINE Works・Zoom)にのみ使い、箇条書きマーカーには使わない", ... },
+  "content": { "セクションキー": "本文(日本語)。箇条書きは各項目を「■」で始め、項目の区切りには必ず改行文字を入れる(JSON文字列内では \\\\n)。1項目1〜2文。「・」は語句の並列(例: LINE Works・Zoom)にのみ使い、箇条書きマーカーには使わない。本文中で語句を引用・強調するときは半角の \\" ではなく「」を使う", ... },
   "short_summary": "クラス(SCCP/FBS)の場合のみ140字程度の概要。それ以外はnull",
   "open_actions": [ {"text":"やること","owner":"担当(不明なら空)","due":null,"done":false}, ... ]
 }
